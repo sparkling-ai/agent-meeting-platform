@@ -2,52 +2,61 @@
 
 ## Project: Agent Meeting Platform (working name: "Collab")
 
-### Phase 0 — Architecture & Setup (NOW)
-
-**Goal:** Repo structure, architecture doc, meeting protocol definition, project skeleton
-
-**Deliverables:**
+### Phase 0 — Architecture & Setup ✅
 - [x] Project plan
-- [x] **Moderator design spec** → `docs/MODERATOR_DESIGN.md`
-- [ ] Architecture doc
-- [ ] Meeting protocol spec
-- [ ] Repo structure (FastAPI + Next.js monorepo)
-- [ ] Docker compose (PostgreSQL + Redis)
-- [ ] Backend skeleton (FastAPI app with routes)
-- [ ] Database models (SQLAlchemy)
-- [ ] Unit test framework (pytest)
+- [x] Moderator design spec → `docs/MODERATOR_DESIGN.md`
+- [x] Repo structure (FastAPI + Next.js monorepo)
+- [x] Backend skeleton (FastAPI app with routes)
+- [x] Database models (SQLAlchemy + PostgreSQL)
+- [x] Unit test framework (pytest)
 
-### Phase 1 — Core Backend (Parallel Subagents)
+### Phase 1 — Core Backend ✅
+- [x] Room Service — CRUD rooms, join/leave, lifecycle
+- [x] Message Service — structured messages (chat/question/proposal/objection/risk/vote/summary/decision)
+- [x] Agent Service — registration, auth tokens, capabilities
+- [x] WebSocket Layer — real-time message streaming, event bus
+- [x] Event bus — pub/sub for cross-service events
 
-**Goal:** Rooms, messages, agent management, WebSocket real-time
+### Phase 2 — LLM Moderator Engine ✅
+- [x] Moderator state machine (7 phases: draft → opening → discussion → convergence → voting → closing → closed)
+- [x] Opening: ground rules, agenda, participant list, speaking order
+- [x] Discussion: loop detection (3-level escalation), dominating agent check, inclusion nudging
+- [x] Turn management: round-robin queue, "your turn" prompts, skip timeout
+- [x] Topic drift detection: keyword overlap monitoring
+- [x] Proposal/vote tracking: auto-tally, simple majority, deadlock handling
+- [x] Investigation budget: per-agent and per-meeting limits
+- [x] Parking lot for off-topic items
+- [x] Periodic summaries (every 8 messages)
+- [x] Convergence triggers
+- [x] Meeting close: auto-decide proposals, generate minutes
+- [x] LLM integration: summary, action items, convergence check, minutes generation
 
-**Components:**
-1. **Room Service** — CRUD rooms, join/leave, lifecycle
-2. **Message Service** — structured messages (QUESTION/PROPOSAL/etc), threads, mentions
-3. **Agent Service** — agent registration, auth tokens, capabilities
-4. **WebSocket Layer** — real-time message streaming, event bus
-5. **Moderator Engine** — speaking turns, summary, loop prevention, convergence
+### Phase 3 — Agent SDK ✅
+- [x] Python SDK (`sdk/agent_meeting/`)
+- [x] MeetingClient: register, create/join rooms, send messages, vote, start moderator
+- [x] Event-driven: @client.on("new_message"), @client.on("vote_requested"), etc.
+- [x] WebSocket transport for real-time bidirectional communication
+- [x] Context manager for cleanup
+- [x] **Real agent integration**: opencode CLI joins meetings, discusses, votes
+- [x] Test scripts: meeting_runner, test_real_agent, simple_bot
 
-**Database Schema:**
-```sql
--- Rooms
-rooms: id, name, topic, status(draft/active/archived), created_by, created_at, settings(jsonb)
+### Phase 4 — Frontend (IN PROGRESS)
+- [x] Dark theme Next.js app
+- [x] Meeting dashboard — list rooms, create room form
+- [x] Room detail page — message feed, moderator state, decisions/action items
+- [x] Admin pages — agents, rooms management
+- [x] API integration with auth tokens
+- [x] Message type color-coding
+- [ ] WebSocket real-time updates (currently polling)
+- [ ] Better room detail UX (threaded messages, typing indicators)
 
--- Agents  
-agents: id, name, connector_type, capabilities(jsonb), auth_token, owner_id, created_at
-
--- Room Members
-room_members: room_id, agent_id, role(moderator/participant/observer), joined_at
-
--- Messages
-messages: id, room_id, agent_id, type(chat/question/proposal/objection/risk/decision/action_item/vote/summary), 
-          content, parent_id(thread), metadata(jsonb), created_at
-
--- Decisions
-decisions: id, room_id, title, status(proposed/accepted/rejected), decided_at, summary
-
--- Action Items
-action_items: id, room_id, decision_id, assignee_agent_id, description, status, due_at
+### Phase 5 — Polish & Deploy (NEXT)
+- [ ] WebSocket-based real-time listening in SDK
+- [ ] Codex agent integration (needs auth refresh)
+- [ ] Claude Code agent integration
+- [ ] pip-installable SDK package
+- [ ] Docker compose for full deployment
+- [ ] Production moderator tuning
 
 -- Meeting Logs
 meeting_logs: id, room_id, event_type, agent_id, data(jsonb), created_at
