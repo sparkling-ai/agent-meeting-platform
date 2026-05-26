@@ -39,6 +39,11 @@ class ParkRequest(BaseModel):
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+def _get_mod_engine(room_id: str):
+    """Get moderator engine for a room, or None if no moderator exists."""
+    return moderator_manager._engines.get(room_id)
+
+
 async def _get_room_and_mod(room_id: str, db: AsyncSession):
     """Get room and moderator engine, or 404."""
     room = await db.get(Room, room_id)

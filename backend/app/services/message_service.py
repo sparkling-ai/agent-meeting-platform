@@ -1,10 +1,14 @@
 """Message posting and history service."""
 
+import logging
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.message import Message, MessageType, RoomMember
 from app.schemas import MessageCreate
+
+logger = logging.getLogger(__name__)
 
 
 async def post_message(db: AsyncSession, room_id: str, data: MessageCreate) -> Message:
@@ -36,6 +40,35 @@ async def post_message(db: AsyncSession, room_id: str, data: MessageCreate) -> M
     )
     db.add(message)
     await db.flush()
+
+    # Notify moderator engine if one exists for this room
+    try:
+        from app.routers.moderator import _get_mod_engine
+        engine = _get_mod_engine(room_id)
+        if engine:
+            # Get agent name for moderator
+            from app.models.agent import Agent
+            agent_result = await db.execute(
+                select(Agent.name).where(Agent.id == data.agent_id)
+            )
+            agent_name = agent_result.scalar() or str(data.agent_id)[:8]
+            actions = await engine.on_message_posted(message, db, agent_name=agent_name)
+            if actions:
+                from app.models.agent import Agent as AgentModel
+                mod_agent_id = engine.state.moderator_agent_id
+                for action in actions:
+                    mod_msg = Message(
+                        room_id=room_id,
+                        agent_id=mod_agent_id,
+                        type=action.get("type", "chat"),
+                        content=action["content"],
+                        metadata_={"moderator_action": action.get("action", "auto")},
+                    )
+                    db.add(mod_msg)
+                await db.flush()
+    except Exception as e:
+        logger.warning("Moderator notification failed: %s", e)
+
     return message
 
 
