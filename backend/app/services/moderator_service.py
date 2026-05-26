@@ -672,7 +672,7 @@ class ModeratorEngine:
 
     # ── Vote initiation ──────────────────────────────────────────────
     async def initiate_vote(self, proposal_id: str | None, db: AsyncSession) -> dict:
-        """Move to voting phase for a proposal."""
+        """Move to voting phase and tally existing votes."""
         if self.state.phase not in (MeetingPhase.DISCUSSION, MeetingPhase.CONVERGENCE):
             return {"action": "error", "type": "chat", "content": "Cannot initiate vote in current phase."}
 
@@ -680,21 +680,42 @@ class ModeratorEngine:
             self.transition(MeetingPhase.CONVERGENCE)
         self.transition(MeetingPhase.VOTING)
 
+        target_proposal = None
         if proposal_id and proposal_id in self.state.active_proposals:
-            proposal = self.state.active_proposals[proposal_id]
-            proposal.status = "voting"
-        else:
-            proposal_id = proposal_id or "current"
+            target_proposal = self.state.active_proposals[proposal_id]
+            target_proposal.status = "voting"
+        elif not proposal_id and self.state.active_proposals:
+            # Use the most recent proposal
+            target_proposal = list(self.state.active_proposals.values())[-1]
+            proposal_id = target_proposal.proposal_id
 
-        return {
+        # Auto-tally if we have enough votes
+        actions = []
+        if target_proposal and len(target_proposal.votes) > 0:
+            yes_count = sum(1 for v in target_proposal.votes if v["choice"] in ("yes", "agree", "accept"))
+            if yes_count >= 2:  # Simple majority: at least 2 yes votes
+                tally_results = await self._tally_votes(target_proposal, db)
+                actions.extend(tally_results)
+
+        content_text = (
+            f"🗳️ **Voting is now open** on: {target_proposal.content[:200] if target_proposal else 'the current proposal'}\n\n"
+            "Please cast your vote: **yes** or **no** (with optional reasoning)."
+        ) if not actions else actions[-1].get("content", content_text if 'content_text' in dir() else "")
+
+        result = {
             "action": "vote_open",
             "type": "chat",
-            "content": (
-                f"🗳️ **Voting is now open** on: {self.state.active_proposals.get(proposal_id, TrackedProposal(proposal_id=proposal_id, proposer_id='', content='the current proposal')).content[:200]}\n\n"
-                "Please cast your vote: **yes** or **no** (with optional reasoning)."
-            ),
-            "metadata": {"trigger": "vote_open", "proposal_id": proposal_id},
+            "content": content_text,
+            "metadata": {"trigger": "vote_open", "proposal_id": proposal_id or "current"},
         }
+        if actions:
+            # Return the decision result instead
+            result = actions[0]
+            # Also post action items
+            for a in actions[1:]:
+                # These will be handled by the router
+                pass
+        return result
 
     # ── Force decision ───────────────────────────────────────────────
     async def force_decision(self, db: AsyncSession) -> dict:
@@ -718,6 +739,16 @@ class ModeratorEngine:
     async def close_meeting(self, db: AsyncSession) -> dict:
         """Generate final minutes and close the meeting."""
         self.state.meeting_ended_at = datetime.now(timezone.utc)
+
+        # Force-decide any proposals with clear majority
+        for pid, proposal in list(self.state.active_proposals.items()):
+            if proposal.status != "accepted" and len(proposal.votes) >= 2:
+                yes_count = sum(1 for v in proposal.votes if v["choice"] in ("yes", "agree", "accept"))
+                if yes_count >= 2:
+                    await self._tally_votes(proposal, db)
+
+        # Commit any pending decisions
+        await db.flush()
 
         # Generate minutes
         all_msgs = "\n".join(
