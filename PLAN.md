@@ -8,6 +8,7 @@
 
 **Deliverables:**
 - [x] Project plan
+- [x] **Moderator design spec** → `docs/MODERATOR_DESIGN.md`
 - [ ] Architecture doc
 - [ ] Meeting protocol spec
 - [ ] Repo structure (FastAPI + Next.js monorepo)
@@ -82,21 +83,46 @@ WS     /api/rooms/{id}/ws            — WebSocket connection
 POST   /api/rooms/{id}/moderate/...  — Moderator actions
 ```
 
-### Phase 2 — Moderator System
+### Phase 2 — Moderator System (Design: `docs/MODERATOR_DESIGN.md`)
 
-**Goal:** Intelligent meeting moderation
+**Goal:** Intelligent meeting moderation following the comprehensive design spec
 
 **Components:**
-1. Turn management — queue-based speaking order
-2. Loop detection — detect circular arguments, force convergence
-3. Summarization — periodic summaries via LLM
-4. Decision tracking — proposals → votes → decisions
-5. Action item extraction — from decisions
+1. **Moderator State Machine** — FSM managing meeting lifecycle phases (Draft → Opening → Discussion → Convergence → Voting → Closing → Closed)
+2. **Agenda Manager** — agenda item tracking with timeboxes and per-item decision requirements
+3. **Turn Manager** — multiple strategies (round-robin, queue, free-for-all, directed, timed)
+4. **Loop Detector** — semantic similarity-based argument tracking with 3 intervention levels
+5. **Topic Drift Detector** — embedding similarity between messages and current agenda item
+6. **Inclusion Monitor** — track participation, prompt silent agents
+7. **Summary Generator** — LLM-powered summaries at configurable intervals
+8. **Decision Tracker** — state machine for proposals (proposed → discussing → voting → accepted/rejected/escalated)
+9. **Action Item Extractor** — LLM-powered extraction from decisions
+10. **Investigation Budget Manager** — per-agent research budget (default 5 min, max 3 per meeting)
+11. **Context Manager** — rolling summary + message window to handle token limits
+12. **Anti-Pattern Interventions** — built-in handlers for: infinite loops, dominating agents, analysis paralysis, groupthink, topic drift, silent agents, context explosion
+13. **Meeting Templates** — predefined formats for: sprint planning, architecture review, incident post-mortem, decision meeting, brainstorming, standup
+14. **Conflict Resolution** — separate positions from interests, steel-manning, common ground finding
+
+**Decision-Making Frameworks (configurable per agenda item):**
+- Consensus (with accept vs agree distinction)
+- Majority vote
+- Roman voting (thumbs up/down/sideways)
+- Fist of Five (0-5 confidence scale, blockers must explain)
+- RAPID (Recommend/Agree/Perform/Input/Decide)
+- Escalate to human
+
+**Agent-Specific Features:**
+- Investigation budget with approval workflow
+- Partial answers and uncertainty expression
+- Async participation support
+- Agent capabilities declaration
+- Decisions on partial information (with confidence tracking)
 
 **LLM Integration (for moderator intelligence):**
 - GLM (zai/glm-5.1) via OpenRouter
 - OpenRouter for model flexibility
 - LiteLLM abstraction for multi-provider support
+- **Tiered model selection:** fast model for detection/classification, quality model for summaries/decisions
 
 ### Phase 3 — Agent Connectors
 
