@@ -4,29 +4,36 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  roomsApi, messagesApi, agentsApi,
-  type RoomDetail, type Message, type Agent,
+  roomsApi, messagesApi, agentsApi, moderatorApi, decisionsApi, actionItemsApi,
+  type RoomDetail, type Message, type Agent, type ModeratorState,
 } from "@/lib/api";
 import { useWebSocket, type WsMessage } from "@/hooks/useWebSocket";
 
 const MSG_TYPES = ["chat", "question", "proposal", "objection", "risk", "decision", "action_item", "vote", "summary", "request_ctx"] as const;
 
 const typeStyles: Record<string, string> = {
-  chat: "bg-gray-50 border-gray-200",
-  question: "bg-blue-50 border-blue-300",
-  proposal: "bg-purple-50 border-purple-300",
-  objection: "bg-orange-50 border-orange-300",
-  risk: "bg-red-50 border-red-300",
-  decision: "bg-green-50 border-green-300",
-  action_item: "bg-indigo-50 border-indigo-300",
-  vote: "bg-yellow-50 border-yellow-300",
-  summary: "bg-teal-50 border-teal-300",
-  request_ctx: "bg-cyan-50 border-cyan-300",
+  chat: "bg-slate-800 border-slate-600",
+  question: "bg-blue-950 border-blue-800",
+  proposal: "bg-purple-950 border-purple-800",
+  objection: "bg-orange-950 border-orange-800",
+  risk: "bg-red-950 border-red-800",
+  decision: "bg-emerald-950 border-emerald-800",
+  action_item: "bg-indigo-950 border-indigo-800",
+  vote: "bg-amber-950 border-amber-800",
+  summary: "bg-teal-950 border-teal-800",
+  request_ctx: "bg-cyan-950 border-cyan-800",
+  system: "bg-slate-900 border-slate-700",
 };
 
 const typeIcons: Record<string, string> = {
   chat: "💬", question: "❓", proposal: "📋", objection: "⚠️", risk: "🔴",
-  decision: "✅", action_item: "📌", vote: "🗳️", summary: "📝", request_ctx: "🔍",
+  decision: "✅", action_item: "📌", vote: "🗳️", summary: "📝", request_ctx: "🔍", system: "⚙️",
+};
+
+const typeAccent: Record<string, string> = {
+  chat: "text-slate-300", question: "text-blue-300", proposal: "text-purple-300", objection: "text-orange-300",
+  risk: "text-red-300", decision: "text-emerald-300", action_item: "text-indigo-300", vote: "text-amber-300",
+  summary: "text-teal-300", request_ctx: "text-cyan-300", system: "text-slate-400",
 };
 
 export default function RoomView() {
@@ -36,6 +43,9 @@ export default function RoomView() {
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [moderatorState, setModeratorState] = useState<ModeratorState | null>(null);
+  const [decisions, setDecisions] = useState<Array<{ id: string; content: string }>>([]);
+  const [actionItems, setActionItems] = useState<Array<{ id: string; content: string; status: string }>>([]);
   const [error, setError] = useState("");
 
   // Composer state
@@ -53,19 +63,47 @@ export default function RoomView() {
     try {
       const [r, msgResp, a] = await Promise.all([
         roomsApi.get(roomId),
-        messagesApi.list(roomId, { limit: 100 }),
+        messagesApi.list(roomId, { limit: 200 }),
         agentsApi.list(),
       ]);
       setRoom(r);
       setMessages(msgResp.messages);
       setAgents(a);
       if (a.length > 0 && !selectedAgent) setSelectedAgent(a[0].id);
+      setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
   }, [roomId, selectedAgent]);
 
+  // Load moderator state & decisions
+  const loadExtras = useCallback(async () => {
+    try {
+      const [mod, dec, actions] = await Promise.all([
+        moderatorApi.getState(roomId).catch(() => null),
+        decisionsApi.list(roomId).catch(() => []),
+        actionItemsApi.list(roomId).catch(() => []),
+      ]);
+      setModeratorState(mod);
+      setDecisions(dec as any[]);
+      setActionItems(actions as any[]);
+    } catch {}
+  }, [roomId]);
+
   useEffect(() => { loadRoom(); }, [roomId]);
+  useEffect(() => { loadExtras(); }, [roomId]);
+
+  // Poll messages every 2s
+  useEffect(() => {
+    if (connected) return; // WS handles it
+    const interval = setInterval(async () => {
+      try {
+        const resp = await messagesApi.list(roomId, { limit: 200 });
+        setMessages(resp.messages);
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [roomId, connected]);
 
   // Handle WS events
   useEffect(() => {
@@ -82,20 +120,16 @@ export default function RoomView() {
     }
   }, [lastEvent, roomId]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Get token for selected agent
   const ensureToken = async (agentId: string) => {
     if (!agentId) return;
     try {
       const resp = await agentsApi.getToken(agentId);
       setAgentToken(resp.token);
-    } catch {
-      // token might already exist
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -117,9 +151,8 @@ export default function RoomView() {
       }
       setContent("");
       setReplyTo(null);
-      // Refresh if not WS
       if (!connected) {
-        const resp = await messagesApi.list(roomId, { limit: 100 });
+        const resp = await messagesApi.list(roomId, { limit: 200 });
         setMessages(resp.messages);
       }
     } catch (e) {
@@ -136,22 +169,40 @@ export default function RoomView() {
     }
   };
 
-  const handleStatusChange = async (status: string) => {
+  const handleActivate = async () => {
     try {
-      await roomsApi.updateStatus(roomId, status);
+      await roomsApi.activate(roomId);
       loadRoom();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update");
+      setError(e instanceof Error ? e.message : "Failed to activate");
     }
   };
 
-  const agentNameMap = Object.fromEntries(agents.map((a) => [a.id, a.name]));
-  // Also include members from room
+  const handleClose = async () => {
+    if (!confirm("Close this meeting?")) return;
+    try {
+      await roomsApi.close(roomId);
+      loadRoom();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to close");
+    }
+  };
+
+  const handleStartModerator = async () => {
+    try {
+      const state = await moderatorApi.start(roomId);
+      setModeratorState(state);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start moderator");
+    }
+  };
+
+  const agentNameMap: Record<string, string> = {};
+  agents.forEach((a) => { agentNameMap[a.id] = a.name; });
   if (room) {
     room.members.forEach((m) => { if (!agentNameMap[m.agent_id]) agentNameMap[m.agent_id] = m.agent_name; });
   }
 
-  // Build threads
   const topLevel = messages.filter((m) => !m.parent_id);
   const replies = messages.filter((m) => m.parent_id);
   const repliesByParent: Record<string, Message[]> = {};
@@ -160,75 +211,117 @@ export default function RoomView() {
     repliesByParent[r.parent_id!].push(r);
   });
 
-  if (!room) return <div className="p-8 text-center text-gray-500">Loading room...</div>;
+  if (!room) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    </div>
+  );
 
   return (
     <div className="flex h-[calc(100vh-52px)]">
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Room header */}
-        <div className="bg-white border-b px-6 py-3 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <Link href="/" className="text-gray-400 hover:text-gray-600">← Back</Link>
-              <h1 className="text-xl font-bold">{room.name}</h1>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                room.status === "active" ? "bg-green-100 text-green-800" :
-                room.status === "archived" ? "bg-yellow-100 text-yellow-800" :
-                "bg-gray-100 text-gray-700"
+        <div className="bg-slate-900 border-b border-slate-700 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <Link href="/" className="text-slate-400 hover:text-white transition shrink-0">←</Link>
+              <h1 className="text-xl font-bold text-white truncate">{room.name}</h1>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                room.status === "active" ? "bg-emerald-900 text-emerald-200" :
+                room.status === "archived" ? "bg-amber-900 text-amber-200" :
+                "bg-slate-700 text-slate-300"
               }`}>
                 {room.status}
               </span>
+              <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${connected ? "bg-emerald-900 text-emerald-300" : "bg-red-900 text-red-300"}`}>
+                {connected ? "● Live" : "○ Polling"}
+              </span>
             </div>
-            {room.topic && <p className="text-sm text-gray-500 mt-1">{room.topic}</p>}
+            <div className="flex gap-2 shrink-0 ml-4">
+              {room.status === "draft" && (
+                <button onClick={handleActivate} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700 transition font-medium">
+                  ▶ Activate
+                </button>
+              )}
+              {room.status === "active" && (
+                <>
+                  <button onClick={handleStartModerator} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-purple-700 transition font-medium">
+                    🎯 Start Moderator
+                  </button>
+                  <button onClick={handleClose} className="bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-red-800 transition font-medium">
+                    Close Meeting
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            {room.status === "draft" && (
-              <button onClick={() => handleStatusChange("active")} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
-                Activate
-              </button>
-            )}
-            {room.status === "active" && (
-              <button onClick={() => handleStatusChange("archived")} className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700">
-                Archive
-              </button>
-            )}
-            <span className={`text-xs px-2 py-1 rounded ${connected ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-              {connected ? "WS Connected" : "WS Disconnected"}
-            </span>
-          </div>
+          {room.topic && <p className="text-sm text-slate-400 mt-1 truncate">{room.topic}</p>}
         </div>
+
+        {/* Moderator Phase Bar */}
+        {moderatorState && moderatorState.status === "running" && (
+          <div className="bg-purple-900/40 border-b border-purple-700 px-6 py-2">
+            <div className="flex items-center gap-4">
+              <span className="text-purple-300 text-sm font-medium">🎯 Moderator Active</span>
+              {moderatorState.current_phase && (
+                <span className="text-purple-200 text-sm">Phase: {moderatorState.current_phase}</span>
+              )}
+              {moderatorState.current_item && (
+                <span className="text-purple-200/70 text-sm">— {moderatorState.current_item}</span>
+              )}
+              <div className="flex gap-1 ml-auto">
+                {moderatorState.phases?.map((p, i) => (
+                  <div
+                    key={i}
+                    className={`h-2 w-8 rounded-full ${
+                      p.status === "completed" ? "bg-emerald-500" :
+                      p.status === "active" ? "bg-purple-400 animate-pulse" :
+                      "bg-slate-600"
+                    }`}
+                    title={p.name}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {topLevel.length === 0 && (
-            <p className="text-center text-gray-400 py-12">No messages yet. Start the conversation!</p>
+            <div className="text-center py-16">
+              <p className="text-slate-500 text-lg">No messages yet</p>
+              <p className="text-slate-600 text-sm mt-1">Start the conversation!</p>
+            </div>
           )}
           {topLevel.map((msg) => (
-            <div key={msg.id} className={`rounded-lg border p-3 ${typeStyles[msg.type] || "bg-gray-50"}`}>
-              <div className="flex items-center gap-2 mb-1">
+            <div key={msg.id} className={`rounded-xl border p-4 ${typeStyles[msg.type] || typeStyles.chat}`}>
+              <div className="flex items-center gap-2 mb-2">
                 <span className="text-sm">{typeIcons[msg.type] || "💬"}</span>
-                <span className="font-medium text-sm">{agentNameMap[msg.agent_id || ""] || "Unknown"}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-white/60">{msg.type}</span>
-                <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                <span className="font-medium text-sm text-white">{agentNameMap[msg.agent_id || ""] || "System"}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full bg-black/30 ${typeAccent[msg.type] || "text-slate-400"}`}>
+                  {msg.type}
+                </span>
+                <span className="text-xs text-slate-500 ml-auto">{new Date(msg.created_at).toLocaleTimeString()}</span>
               </div>
-              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+              <p className="text-sm whitespace-pre-wrap text-slate-200">{msg.content}</p>
               <button
                 onClick={() => setReplyTo(msg.id)}
-                className="text-xs text-gray-400 hover:text-gray-600 mt-1"
+                className="text-xs text-slate-500 hover:text-slate-300 mt-2 transition"
               >
                 ↩ Reply
               </button>
               {repliesByParent[msg.id]?.length > 0 && (
-                <div className="ml-4 mt-2 space-y-2 border-l-2 pl-3">
+                <div className="ml-4 mt-3 space-y-2 border-l-2 border-slate-600 pl-3">
                   {repliesByParent[msg.id].map((r) => (
-                    <div key={r.id} className={`rounded border p-2 ${typeStyles[r.type] || "bg-gray-50"}`}>
+                    <div key={r.id} className={`rounded-lg border p-3 ${typeStyles[r.type] || typeStyles.chat}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm">{typeIcons[r.type]}</span>
-                        <span className="font-medium text-xs">{agentNameMap[r.agent_id || ""] || "Unknown"}</span>
-                        <span className="text-xs text-gray-400">{new Date(r.created_at).toLocaleTimeString()}</span>
+                        <span className="text-xs">{typeIcons[r.type]}</span>
+                        <span className="font-medium text-xs text-white">{agentNameMap[r.agent_id || ""] || "Unknown"}</span>
+                        <span className="text-xs text-slate-500">{new Date(r.created_at).toLocaleTimeString()}</span>
                       </div>
-                      <p className="text-xs whitespace-pre-wrap">{r.content}</p>
+                      <p className="text-xs whitespace-pre-wrap text-slate-300">{r.content}</p>
                     </div>
                   ))}
                 </div>
@@ -239,27 +332,27 @@ export default function RoomView() {
         </div>
 
         {/* Composer */}
-        <div className="bg-white border-t p-4">
-          {error && <div className="bg-red-50 text-red-700 p-2 rounded text-sm mb-2">{error}</div>}
+        <div className="bg-slate-900 border-t border-slate-700 p-4">
+          {error && <div className="bg-red-900/50 border border-red-700 text-red-200 p-2 rounded-lg text-sm mb-2">{error}</div>}
           {replyTo && (
-            <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
-              Replying to: {messages.find((m) => m.id === replyTo)?.content.slice(0, 50)}...
-              <button onClick={() => setReplyTo(null)} className="text-red-400 hover:text-red-600">✕</button>
+            <div className="flex items-center gap-2 mb-2 text-sm text-slate-400">
+              ↩ Replying to: {messages.find((m) => m.id === replyTo)?.content.slice(0, 50)}...
+              <button onClick={() => setReplyTo(null)} className="text-red-400 hover:text-red-300">✕</button>
             </div>
           )}
           <div className="flex gap-2">
             <select
-              className="border rounded px-2 py-2 text-sm"
+              className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
               value={selectedAgent}
               onChange={(e) => setSelectedAgent(e.target.value)}
             >
-              <option value="">Select Agent</option>
+              <option value="">Agent</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
             <select
-              className="border rounded px-2 py-2 text-sm"
+              className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
               value={msgType}
               onChange={(e) => setMsgType(e.target.value)}
             >
@@ -268,7 +361,7 @@ export default function RoomView() {
               ))}
             </select>
             <input
-              className="flex-1 border rounded px-3 py-2 text-sm"
+              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
               placeholder="Type a message..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -277,7 +370,7 @@ export default function RoomView() {
             <button
               onClick={handleSend}
               disabled={!content.trim() || !selectedAgent}
-              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium"
             >
               Send
             </button>
@@ -286,77 +379,89 @@ export default function RoomView() {
       </div>
 
       {/* Sidebar */}
-      <div className="w-64 bg-white border-l p-4 overflow-y-auto">
-        <h2 className="font-semibold mb-3">Members ({room.members.length})</h2>
-        {room.members.length === 0 && <p className="text-gray-400 text-sm">No members yet</p>}
-        {room.members.map((m) => (
-          <div key={m.agent_id} className="flex items-center justify-between py-1.5">
-            <div>
-              <span className="text-sm">{m.agent_name}</span>
-              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
-                m.role === "moderator" ? "bg-purple-100 text-purple-700" :
-                m.role === "observer" ? "bg-gray-100 text-gray-600" :
-                "bg-blue-100 text-blue-700"
-              }`}>
-                {m.role}
-              </span>
+      <div className="w-72 bg-slate-900 border-l border-slate-700 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* Members */}
+          <h2 className="font-semibold text-sm text-slate-400 uppercase tracking-wider mb-3">
+            Members ({room.members.length})
+          </h2>
+          {room.members.length === 0 && <p className="text-slate-600 text-sm mb-4">No members yet</p>}
+          <div className="space-y-1 mb-4">
+            {room.members.map((m) => (
+              <div key={m.agent_id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800">
+                <span className="text-sm text-slate-300">🤖 {m.agent_name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  m.role === "moderator" ? "bg-purple-900 text-purple-300" :
+                  m.role === "observer" ? "bg-slate-700 text-slate-400" :
+                  "bg-blue-900 text-blue-300"
+                }`}>
+                  {m.role}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <hr className="border-slate-700 my-4" />
+
+          {/* Join Room */}
+          {agents.filter((a) => !room.members.some((m) => m.agent_id === a.id)).length > 0 && (
+            <>
+              <h2 className="font-semibold text-sm text-slate-400 uppercase tracking-wider mb-3">Join Room</h2>
+              <div className="space-y-2 mb-4">
+                {agents.filter((a) => !room.members.some((m) => m.agent_id === a.id)).map((a) => (
+                  <div key={a.id} className="flex items-center justify-between px-2">
+                    <span className="text-sm text-slate-400">{a.name}</span>
+                    <select
+                      className="bg-slate-800 border border-slate-600 rounded text-xs px-2 py-1 text-white"
+                      defaultValue=""
+                      onChange={(e) => { if (e.target.value) handleJoin(a.id, e.target.value); }}
+                    >
+                      <option value="">Join as...</option>
+                      <option value="participant">Participant</option>
+                      <option value="moderator">Moderator</option>
+                      <option value="observer">Observer</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <hr className="border-slate-700 my-4" />
+            </>
+          )}
+
+          {/* Decisions */}
+          <h2 className="font-semibold text-sm text-emerald-400 uppercase tracking-wider mb-3">
+            ✅ Decisions ({decisions.length})
+          </h2>
+          {decisions.length === 0 && messages.filter(m => m.type === "decision").length === 0 ? (
+            <p className="text-slate-600 text-sm mb-4">No decisions yet</p>
+          ) : (
+            <div className="space-y-2 mb-4">
+              {(decisions.length > 0 ? decisions : messages.filter(m => m.type === "decision").map(m => ({id: m.id, content: m.content}))).map((d) => (
+                <div key={d.id} className="bg-emerald-950 border border-emerald-800 rounded-lg p-2.5 text-sm text-emerald-200">
+                  ✅ {d.content.slice(0, 100)}
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
+          )}
 
-        <hr className="my-4" />
+          <hr className="border-slate-700 my-4" />
 
-        <h2 className="font-semibold mb-3">Join Room</h2>
-        {agents.filter((a) => !room.members.some((m) => m.agent_id === a.id)).length === 0 ? (
-          <p className="text-gray-400 text-sm">All agents joined</p>
-        ) : (
-          <div className="space-y-2">
-            {agents.filter((a) => !room.members.some((m) => m.agent_id === a.id)).map((a) => (
-              <div key={a.id} className="flex items-center justify-between">
-                <span className="text-sm">{a.name}</span>
-                <select
-                  className="border rounded text-xs px-1 py-0.5"
-                  defaultValue="participant"
-                  onChange={(e) => handleJoin(a.id, e.target.value)}
-                >
-                  <option value="participant">Join</option>
-                  <option value="moderator">Mod</option>
-                  <option value="observer">Observe</option>
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <hr className="my-4" />
-
-        <h2 className="font-semibold mb-3">Decisions</h2>
-        {messages.filter((m) => m.type === "decision").length === 0 ? (
-          <p className="text-gray-400 text-sm">No decisions yet</p>
-        ) : (
-          <div className="space-y-2">
-            {messages.filter((m) => m.type === "decision").map((m) => (
-              <div key={m.id} className="bg-green-50 border border-green-200 rounded p-2 text-sm">
-                ✅ {m.content.slice(0, 80)}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <hr className="my-4" />
-
-        <h2 className="font-semibold mb-3">Action Items</h2>
-        {messages.filter((m) => m.type === "action_item").length === 0 ? (
-          <p className="text-gray-400 text-sm">No action items yet</p>
-        ) : (
-          <div className="space-y-2">
-            {messages.filter((m) => m.type === "action_item").map((m) => (
-              <div key={m.id} className="bg-indigo-50 border border-indigo-200 rounded p-2 text-sm">
-                📌 {m.content.slice(0, 80)}
-              </div>
-            ))}
-          </div>
-        )}
+          {/* Action Items */}
+          <h2 className="font-semibold text-sm text-indigo-400 uppercase tracking-wider mb-3">
+            📌 Action Items ({actionItems.length})
+          </h2>
+          {actionItems.length === 0 && messages.filter(m => m.type === "action_item").length === 0 ? (
+            <p className="text-slate-600 text-sm">No action items yet</p>
+          ) : (
+            <div className="space-y-2">
+              {(actionItems.length > 0 ? actionItems : messages.filter(m => m.type === "action_item").map(m => ({id: m.id, content: m.content, status: "open"}))).map((a) => (
+                <div key={a.id} className="bg-indigo-950 border border-indigo-800 rounded-lg p-2.5 text-sm text-indigo-200">
+                  📌 {a.content.slice(0, 100)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
