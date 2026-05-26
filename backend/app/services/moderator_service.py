@@ -39,6 +39,13 @@ INVESTIGATION_MAX_PER_AGENT = 3
 INVESTIGATION_MAX_PER_MEETING = 10
 VOTE_PASS_THRESHOLD = 0.5          # >50% yes to pass (simple majority)
 
+# ── Turn management ────────────────────────────────────────────────────────────
+TURN_QUEUE_ENABLED = True          # Enable active turn management
+TURN_TIMEOUT_SECONDS = 30          # Seconds before skipping a silent agent
+TURN_SKIP_THRESHOLD = 2           # N consecutive skips before removing from queue
+CONVERGENCE_MESSAGE_THRESHOLD = 12 # Messages before suggesting convergence
+TOPIC_DRIFT_CHECK_INTERVAL = 6    # Check for drift every N messages
+
 
 # ── Phase enum ───────────────────────────────────────────────────────────────
 class MeetingPhase(StrEnum):
@@ -126,7 +133,17 @@ class ModeratorState:
     message_history: list[dict] = field(default_factory=list)  # {agent_id, content, type, created_at}
     speak_counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     turn_queue: deque[str] = field(default_factory=deque)
-    turn_strategy: str = "free"  # round_robin | queue | free | directed
+    turn_strategy: str = "round_robin"  # round_robin | queue | free | directed
+    current_speaker: str | None = None
+    turn_skips: dict[str, int] = field(default_factory=lambda: defaultdict(int))  # agent_id → consecutive skips
+    last_turn_prompts: dict[str, datetime] = field(default_factory=dict)  # agent_id → last "your turn" prompt time
+
+    # Loop escalation (3 levels)
+    loop_escalation: dict[str, int] = field(default_factory=lambda: defaultdict(int))  # topic_key → level (1=nudge, 2=we've heard this, 3=force convergence)
+
+    # Topic drift
+    topic_keywords: list[str] = field(default_factory=list)  # extracted from meeting topic
+    drift_warnings: int = 0
 
     # Loop detection
     argument_counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
@@ -222,6 +239,33 @@ class ModeratorEngine:
         if agenda_items:
             self.set_agenda(agenda_items)
 
+        # Extract topic keywords for drift detection
+        if room_topic:
+            # Simple keyword extraction (remove common stop words)
+            stop_words = {"the", "a", "an", "is", "are", "was", "were", "be", "been",
+                          "being", "have", "has", "had", "do", "does", "did", "will", "would",
+                          "could", "should", "may", "might", "shall", "can", "need", "dare",
+                          "ought", "used", "to", "of", "in", "for", "on", "with", "at",
+                          "by", "from", "as", "into", "through", "during", "before", "after",
+                          "above", "below", "between", "out", "off", "over", "under", "again",
+                          "further", "then", "once", "and", "but", "or", "nor", "not", "so",
+                          "yet", "both", "either", "neither", "each", "every", "all", "any",
+                          "few", "more", "most", "other", "some", "such", "no", "only", "own",
+                          "same", "than", "too", "very", "just", "because", "if", "when",
+                          "while", "how", "what", "which", "who", "whom", "this", "that",
+                          "these", "those", "it", "its", "we", "our", "us", "i", "me",
+                          "my", "you", "your", "he", "she", "they", "them", "their"}
+            words = room_topic.lower().split()
+            self.state.topic_keywords = [w.strip(".,!?;:") for w in words
+                                         if w.strip(".,!?;:") not in stop_words and len(w) > 2]
+
+        # Initialize turn queue with all members
+        if TURN_QUEUE_ENABLED and member_names:
+            self.state.turn_queue = deque(member_names.keys())
+            self.state.turn_strategy = "round_robin"
+            if self.state.turn_queue:
+                self.state.current_speaker = self.state.turn_queue[0]
+
         # Build opening message
         purpose = room_topic or room_name
         agenda_text = "\n".join(
@@ -250,8 +294,19 @@ class ModeratorEngine:
             f"**Agenda:**\n{agenda_text}\n\n"
             f"**Ground Rules:**\n{ground_rules}"
             f"{members_text}\n\n"
-            f"Let's begin!"
         )
+
+        # Add turn order if using round_robin
+        if TURN_QUEUE_ENABLED and self.state.turn_queue:
+            turn_names = []
+            for aid in self.state.turn_queue:
+                name = (member_names or {}).get(aid, aid[:8])
+                turn_names.append(name)
+            content += f"**Speaking Order:** {' → '.join(turn_names)} (round-robin)\n\n"
+            first_speaker_name = (member_names or {}).get(self.state.current_speaker, "first speaker")
+            content += f"🎯 **{first_speaker_name}**, you're up first! What are your thoughts?"
+        else:
+            content += "Let's begin!"
 
         # Advance agenda to first item
         first_item = self.advance_agenda()
@@ -340,20 +395,31 @@ class ModeratorEngine:
         # ── Discussion analysis (only for chat/question/objection types) ─
         if msg_type in (MessageType.CHAT.value, MessageType.QUESTION.value,
                         MessageType.OBJECTION.value, MessageType.RISK.value):
-            # 1. Loop detection (simple heuristic — same agent pair pattern)
-            loop_action = self._check_loop_simple(agent_id)
+            # 1. Turn management — advance turn queue
+            turn_action = self._advance_turn(agent_id, agent_name)
+            if turn_action:
+                actions.append(turn_action)
+
+            # 2. Loop detection (3-level escalation)
+            loop_action = self._check_loop_escalated(agent_id, content)
             if loop_action:
                 actions.append(loop_action)
 
-            # 2. Dominating agent check
+            # 3. Dominating agent check
             dom_action = self._check_dominating(agent_id, agent_name)
             if dom_action:
                 actions.append(dom_action)
 
-            # 3. Inclusion check
+            # 4. Inclusion check
             inclusion_action = await self._check_inclusion(db, agent_name)
             if inclusion_action:
                 actions.append(inclusion_action)
+
+            # 5. Topic drift detection
+            if self.state.total_messages % TOPIC_DRIFT_CHECK_INTERVAL == 0:
+                drift_action = self._check_topic_drift(content)
+                if drift_action:
+                    actions.append(drift_action)
 
         # ── Periodic summary ─────────────────────────────────────────
         if self.state.messages_since_summary >= SUMMARY_INTERVAL_MESSAGES:
@@ -371,9 +437,72 @@ class ModeratorEngine:
 
         return actions
 
-    # ── Loop detection (heuristic) ───────────────────────────────────
-    def _check_loop_simple(self, agent_id: str) -> dict | None:
-        """Detect if the same small set of agents keeps going back and forth."""
+    # ── Turn management ─────────────────────────────────────────────
+    def _advance_turn(self, agent_id: str, agent_name: str) -> dict | None:
+        """Advance the turn queue after an agent speaks."""
+        if not TURN_QUEUE_ENABLED or not self.state.turn_queue:
+            return None
+
+        # Reset skip count for this agent (they spoke)
+        self.state.turn_skips[agent_id] = 0
+
+        # If agent is the current speaker, advance to next
+        if self.state.current_speaker == agent_id and len(self.state.turn_queue) > 1:
+            # Rotate queue
+            self.state.turn_queue.rotate(-1)
+            self.state.current_speaker = self.state.turn_queue[0]
+            self.state.last_turn_prompts[self.state.current_speaker] = datetime.now(timezone.utc)
+            return {
+                "action": "turn_prompt",
+                "type": "chat",
+                "content": f"🎯 **{self.state.current_speaker[:8]}**, your turn! What are your thoughts?",
+                "metadata": {"trigger": "turn_management", "next_speaker": self.state.current_speaker},
+            }
+        return None
+
+    def _check_turn_timeout(self) -> dict | None:
+        """Check if the current speaker has timed out."""
+        if not TURN_QUEUE_ENABLED or not self.state.current_speaker:
+            return None
+
+        last_prompt = self.state.last_turn_prompts.get(self.state.current_speaker)
+        if not last_prompt:
+            return None
+
+        elapsed = (datetime.now(timezone.utc) - last_prompt).total_seconds()
+        if elapsed < TURN_TIMEOUT_SECONDS:
+            return None
+
+        # Agent timed out — skip them
+        skipped = self.state.current_speaker
+        self.state.turn_skips[skipped] = self.state.turn_skips.get(skipped, 0) + 1
+
+        if self.state.turn_skips[skipped] >= TURN_SKIP_THRESHOLD:
+            # Remove from queue after too many skips
+            self.state.turn_queue = deque(a for a in self.state.turn_queue if a != skipped)
+            if not self.state.turn_queue:
+                return None
+            logger.info("Room %s: removed agent %s from turn queue (too many skips)",
+                        self.state.room_id, skipped[:8])
+
+        # Advance to next
+        self.state.turn_queue.rotate(-1)
+        self.state.current_speaker = self.state.turn_queue[0]
+        self.state.last_turn_prompts[self.state.current_speaker] = datetime.now(timezone.utc)
+
+        return {
+            "action": "turn_skip",
+            "type": "chat",
+            "content": (
+                f"⏭️ {skipped[:8]} didn't respond in time. "
+                f"Moving to **{self.state.current_speaker[:8]}** — your turn!"
+            ),
+            "metadata": {"trigger": "turn_timeout", "skipped": skipped},
+        }
+
+    # ── Loop detection (3-level escalation) ───────────────────────────
+    def _check_loop_escalated(self, agent_id: str, content: str) -> dict | None:
+        """3-level loop escalation: nudge → we've heard this → force convergence."""
         history = self.state.message_history
         if len(history) < 4:
             return None
@@ -383,23 +512,86 @@ class ModeratorEngine:
 
         # If only 2 agents in last 6 messages, potential loop
         if len(unique) <= 2 and len(recent_agents) >= 6:
-            agents_str = " and ".join(unique)
+            agents_str = " & ".join(sorted(unique))
             key = f"loop:{agents_str}"
-            self.state.loop_warnings[key] = self.state.loop_warnings.get(key, 0) + 1
+            self.state.loop_escalation[key] = self.state.loop_escalation.get(key, 0) + 1
+            level = self.state.loop_escalation[key]
 
-            level = self.state.loop_warnings[key]
-            if level >= LOOP_DETECTION_THRESHOLD:
-                self.state.loop_warnings[key] = 0  # reset after intervention
+            if level >= 3:
+                # Level 3: Force convergence
+                self.state.loop_escalation[key] = 0
+                return {
+                    "action": "force_convergence",
+                    "type": "chat",
+                    "content": (
+                        "🔴 **We've been going back and forth too long on this point.** "
+                        "I'm moving us to a decision. "
+                        "Does anyone have a **concrete proposal**? If not, we'll vote on what we have."
+                    ),
+                    "metadata": {"trigger": "loop_escalation", "level": 3},
+                }
+            elif level >= 2:
+                # Level 2: "We've heard this"
                 return {
                     "action": "intervene",
                     "type": "chat",
                     "content": (
-                        "⚠️ We seem to be going in circles on this point. "
-                        "Can anyone add **new information or a different perspective**? "
-                        "Otherwise, we should move to a vote."
+                        "🟡 **We've heard this point several times now.** "
+                        "Unless someone has genuinely new information or a different angle, "
+                        "let's move toward a proposal or decision."
                     ),
-                    "metadata": {"trigger": "loop_detected", "level": level},
+                    "metadata": {"trigger": "loop_escalation", "level": 2},
                 }
+            else:
+                # Level 1: Gentle nudge
+                return {
+                    "action": "intervene",
+                    "type": "chat",
+                    "content": (
+                        "🟢 A quick reminder: we want to add **new perspectives** rather than "
+                        "repeating what's been said. Does anyone have a different angle?"
+                    ),
+                    "metadata": {"trigger": "loop_escalation", "level": 1},
+                }
+        return None
+
+    # ── Topic drift detection ─────────────────────────────────────────
+    def _check_topic_drift(self, content: str) -> dict | None:
+        """Detect if discussion has drifted from the meeting topic."""
+        if not self.state.topic_keywords:
+            return None
+
+        # Simple keyword overlap check
+        content_words = set(content.lower().split())
+        topic_overlap = sum(1 for kw in self.state.topic_keywords if kw in content_words)
+        overlap_ratio = topic_overlap / max(len(self.state.topic_keywords), 1)
+
+        # Also check recent messages
+        recent = self.state.message_history[-TOPIC_DRIFT_CHECK_INTERVAL:]
+        all_recent_words = set()
+        for m in recent:
+            all_recent_words.update(m["content"].lower().split() if isinstance(m["content"], str) else [])
+        recent_overlap = sum(1 for kw in self.state.topic_keywords if kw in all_recent_words)
+        recent_ratio = recent_overlap / max(len(self.state.topic_keywords), 1)
+
+        if overlap_ratio < 0.1 and recent_ratio < 0.15 and self.state.total_messages > 8:
+            self.state.drift_warnings += 1
+            if self.state.drift_warnings <= 2:
+                topic_str = ", ".join(self.state.topic_keywords[:5])
+                return {
+                    "action": "drift_warning",
+                    "type": "chat",
+                    "content": (
+                        f"🧭 **Topic drift detected.** Let's bring the conversation back to our "
+                        f"main topic (keywords: {topic_str}). "
+                        f"If this is important, we can park it for a separate discussion."
+                    ),
+                    "metadata": {"trigger": "topic_drift"},
+                }
+        else:
+            # Reset drift counter when on-topic
+            self.state.drift_warnings = max(0, self.state.drift_warnings - 1)
+
         return None
 
     # ── Dominating agent check ───────────────────────────────────────
