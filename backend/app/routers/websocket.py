@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import async_session_factory
 from app.models import Agent, RoomMember, Message
 from app.core.events import event_bus, Event
-from app.services.moderator_service import moderator_manager
+from app.services.moderator_service import moderator_manager, MeetingPhase
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
@@ -170,7 +170,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
 
                 # Moderator analysis
                 mod = moderator_manager.get(room_id)
-                mod_actions = await mod.on_message_posted(msg, db)
+                mod_actions = await mod.on_message(msg, db, agent_name=agent.name)
+
+                # If moderator hasn't been set yet, skip
+                if not mod.state.moderator_agent_id:
+                    mod_actions = []
 
             # Broadcast to room
             await _broadcast_to_room(room_id, {

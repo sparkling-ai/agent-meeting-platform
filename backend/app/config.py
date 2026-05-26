@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     debug: bool = True
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # LLM / OpenRouter
+    llm_model: str = "openrouter/google/gemini-2.5-flash"
+    openrouter_api_key: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
