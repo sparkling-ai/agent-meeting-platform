@@ -72,12 +72,14 @@ async def leave_room(db: AsyncSession, room_id: str, agent_id: str) -> bool:
 
 
 async def update_room_status(db: AsyncSession, room_id: str, new_status: str) -> Room:
-    room = await get_room(db, room_id)
+    result = await db.execute(select(Room).where(Room.id == room_id))
+    room = result.scalar_one_or_none()
     if not room:
         raise ValueError("Room not found")
     if not is_valid_status_transition(room.status, new_status):
         raise ValueError(f"Cannot transition room from {room.status} to {new_status}")
     room.status = new_status
+    room.updated_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
     await db.flush()
     return room
 
