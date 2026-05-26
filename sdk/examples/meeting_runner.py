@@ -65,7 +65,7 @@ async def create_agent_client(server_url: str, persona: dict) -> MeetingClient:
     # Track conversation context
     context = [f"TOPIC: {MEETING_TOPIC}"]
 
-    @client.on("message")
+    @client.on("new_message")
     async def on_message(event):
         if not event.message or event.message.agent_id == client.agent_id:
             return
@@ -137,7 +137,7 @@ async def main():
 
     # All agents join
     print("\n3️⃣ Joining room...")
-    for client in agents[1:]:
+    for client in agents:  # ALL agents join, including the creator
         await client.join_room(room_id)
     await agents[0].activate_room(room_id)
     print(f"  ✅ {len(agents)} agents joined, room active")
@@ -161,9 +161,16 @@ async def main():
                 f"Respond with JSON: {{\"type\": \"chat|question|proposal|objection|risk\", \"content\": \"your 1-3 sentence response\"}}"
             )
             messages, _ = await client.get_messages(room_id, limit=6)
-            context = "\n".join(f"[{m.agent_name}]({m.type}): {m.content[:100]}" for m in messages[-6:])
+            context = MEETING_TOPIC
+            for m in messages[-6:]:
+                name = m.agent_name or m.agent_id[:8]
+                context += f"\n[{name}]({m.type}): {m.content[:100]}"
             raw = await call_llm(system, f"Discussion:\n{context}\n\nYour response (JSON only):")
             msg_type, content = parse_llm_response(raw)
+            # Validate message type
+            valid_types = {"chat", "question", "proposal", "objection", "risk", "vote", "summary"}
+            if msg_type not in valid_types:
+                msg_type = "chat"
             await client.send(content[:500], type=msg_type, room_id=room_id)
             print(f"    💬 {persona['name']}: {msg_type}")
 

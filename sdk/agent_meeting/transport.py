@@ -36,6 +36,8 @@ class Transport:
     async def post(self, path: str, json_data: dict | None = None, params: dict | None = None) -> dict:
         """Make a POST request."""
         resp = await self._http.post(path, json=json_data, params=params)
+        if resp.status_code >= 400:
+            logger.error("POST %s → %d: %s", path, resp.status_code, resp.text[:300])
         resp.raise_for_status()
         return resp.json()
 
