@@ -740,12 +740,54 @@ class ModeratorEngine:
         """Generate final minutes and close the meeting."""
         self.state.meeting_ended_at = datetime.now(timezone.utc)
 
-        # Force-decide any proposals with clear majority
-        for pid, proposal in list(self.state.active_proposals.items()):
-            if proposal.status != "accepted" and len(proposal.votes) >= 2:
-                yes_count = sum(1 for v in proposal.votes if v["choice"] in ("yes", "agree", "accept"))
-                if yes_count >= 2:
-                    await self._tally_votes(proposal, db)
+        # Force-decide proposals by querying DB directly (doesn't rely on in-memory state)
+        from app.models.message import Message as MsgModel
+        proposal_msgs = (await db.execute(
+            select(MsgModel).where(
+                MsgModel.room_id == self.state.room_id,
+                MsgModel.type == "proposal",
+            )
+        )).scalars().all()
+
+        for pmsg in proposal_msgs:
+            # Check if decision already exists for this proposal
+            existing = (await db.execute(
+                select(Decision).where(Decision.room_id == self.state.room_id)
+            )).scalars().first()
+            if existing:
+                continue
+
+            # Count votes on this proposal
+            vote_msgs = (await db.execute(
+                select(MsgModel).where(
+                    MsgModel.room_id == self.state.room_id,
+                    MsgModel.type == "vote",
+                    MsgModel.parent_id == pmsg.id,
+                )
+            )).scalars().all()
+
+            yes_count = 0
+            for v in vote_msgs:
+                try:
+                    parsed = json.loads(v.content.lower().strip())
+                    if isinstance(parsed, dict) and parsed.get("vote") in ("yes", "agree", "accept"):
+                        yes_count += 1
+                except (json.JSONDecodeError, TypeError):
+                    if v.content.lower().strip() in ("yes", "agree", "accept"):
+                        yes_count += 1
+
+            if yes_count >= 2:  # Simple majority
+                decision = Decision(
+                    room_id=self.state.room_id,
+                    title=f"Decision on: {pmsg.content[:200]}",
+                    description=pmsg.content,
+                    status="accepted",
+                    proposer_agent_id=pmsg.agent_id,
+                    summary=f"Accepted by vote ({yes_count} in favor of {len(vote_msgs)} total votes)",
+                )
+                db.add(decision)
+                await db.flush()
+                self.state.decision_ids.append(str(decision.id))
 
         # Commit any pending decisions
         await db.flush()
