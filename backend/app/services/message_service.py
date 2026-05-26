@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Message, MessageType, RoomMember
+from app.models.message import Message, MessageType, RoomMember
 from app.schemas import MessageCreate
 
 
@@ -29,7 +29,7 @@ async def post_message(db: AsyncSession, room_id: str, data: MessageCreate) -> M
     message = Message(
         room_id=room_id,
         agent_id=data.agent_id,
-        type=data.type.value,
+        type=data.type.value if isinstance(data.type, MessageType) else data.type,
         content=data.content,
         parent_id=data.parent_id,
         metadata_=data.metadata,

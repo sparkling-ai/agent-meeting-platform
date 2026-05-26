@@ -32,7 +32,7 @@ async def get_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
 @router.post("/{agent_id}/token", response_model=AgentTokenResponse)
 async def generate_token(agent_id: str, db: AsyncSession = Depends(get_db)):
     try:
-        token = await agent_service.generate_agent_token(db, agent_id)
-        return AgentTokenResponse(agent_id=agent_id, token=token)
+        aid, token = await agent_service.generate_agent_token(db, agent_id)
+        return AgentTokenResponse(agent_id=aid, token=token)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

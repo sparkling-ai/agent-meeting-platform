@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.protocol import RoomStatus
 from app.schemas import (
     RoomCreate, RoomDetailResponse, RoomJoinRequest, RoomResponse, RoomStatusUpdate,
 )
@@ -20,8 +19,8 @@ async def create_room(data: RoomCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("", response_model=list[RoomResponse])
-async def list_rooms(status_filter: RoomStatus | None = None, db: AsyncSession = Depends(get_db)):
-    return await room_service.list_rooms(db, status=status_filter)
+async def list_rooms(status: str | None = None, db: AsyncSession = Depends(get_db)):
+    return await room_service.list_rooms(db, status=status)
 
 
 @router.get("/{room_id}", response_model=RoomDetailResponse)
@@ -36,7 +35,7 @@ async def get_room(room_id: str, db: AsyncSession = Depends(get_db)):
 async def join_room(room_id: str, data: RoomJoinRequest, db: AsyncSession = Depends(get_db)):
     try:
         member = await room_service.join_room(db, room_id, data)
-        return {"room_id": member.room_id, "agent_id": member.agent_id, "role": member.role}
+        return {"room_id": str(member.room_id), "agent_id": str(member.agent_id), "role": member.role}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -1,4 +1,7 @@
-"""Test configuration — SQLite in-memory for API tests."""
+"""Test configuration — uses real PostgreSQL for E2E tests.
+
+Moderator tests don't need DB at all.
+"""
 
 import asyncio
 from typing import AsyncGenerator
@@ -6,49 +9,43 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import engine, async_session_factory, get_db
 from app.models import Base
 from app.main import app
-from app.database import get_db
-
-# SQLite in-memory for tests
-# We need to handle JSONB -> JSON for SQLite compat
-test_engine = create_async_engine("sqlite+aiosqlite://", echo=False)
-TestSessionFactory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def setup_db():
-    """Create and drop all tables for each test — only if test uses DB."""
-    # Tables will be created on demand; skip for pure unit tests
+@pytest_asyncio.fixture
+async def db_tables():
+    """Create schema + tables before test, drop after. For E2E tests only."""
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS agent_meeting_dev"))
+        await conn.run_sync(Base.metadata.create_all)
     yield
-    # Cleanup
-    async with test_engine.begin() as conn:
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
 
-async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with TestSessionFactory() as session:
+async def _get_test_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
         yield session
         await session.commit()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """API test client — creates tables first."""
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def client(db_tables) -> AsyncGenerator[AsyncClient, None]:
+    """API test client using real PostgreSQL."""
+    app.dependency_overrides[get_db] = _get_test_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+    app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with TestSessionFactory() as session:
+async def db_session(db_tables) -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
         yield session

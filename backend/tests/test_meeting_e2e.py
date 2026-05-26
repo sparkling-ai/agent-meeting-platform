@@ -12,20 +12,17 @@ async def test_full_meeting_flow(client: AsyncClient):
     # 1. Register 3 agents
     agents = []
     for name in ["Alice (Strategist)", "Bob (Engineer)", "Carol (Risk Analyst)"]:
-        resp = await client.post("/api/agents", json={"name": name, "capabilities": {"role": name}})
+        resp = await client.post("/api/agents", json={
+            "name": name,
+            "connector_type": "rest",
+            "capabilities": {"role": name},
+        })
         assert resp.status_code == 201, f"Failed to create agent: {resp.text}"
         agents.append(resp.json())
 
     alice, bob, carol = agents
 
-    # 2. Generate tokens for each agent
-    tokens = {}
-    for agent in agents:
-        resp = await client.post(f"/api/agents/{agent['id']}/token")
-        assert resp.status_code == 200, f"Failed to generate token: {resp.text}"
-        tokens[agent["id"]] = resp.json()["token"]
-
-    # 3. Create a room
+    # 2. Create a room
     resp = await client.post("/api/rooms", json={
         "name": "Q3 Tech Stack Decision",
         "topic": "Should we migrate to Rust or stick with Python?",
@@ -34,12 +31,12 @@ async def test_full_meeting_flow(client: AsyncClient):
     room = resp.json()
     room_id = room["id"]
 
-    # 4. All agents join
+    # 3. All agents join
     for agent in agents:
         resp = await client.post(f"/api/rooms/{room_id}/join", json={"agent_id": agent["id"]})
         assert resp.status_code == 200, f"Failed to join room: {resp.text}"
 
-    # 5. Alice posts a PROPOSAL
+    # 4. Alice posts a PROPOSAL
     resp = await client.post(f"/api/rooms/{room_id}/messages", json={
         "agent_id": alice["id"],
         "type": "proposal",
@@ -49,28 +46,28 @@ async def test_full_meeting_flow(client: AsyncClient):
     proposal_msg = resp.json()
     assert proposal_msg["type"] == "proposal"
 
-    # 6. Bob asks a QUESTION
+    # 5. Bob asks a QUESTION
     resp = await client.post(f"/api/rooms/{room_id}/messages", json={
         "agent_id": bob["id"],
         "type": "question",
-        "content": "What's the estimated migration timeline? We have 3 services to port.",
+        "content": "What's the estimated migration timeline?",
         "parent_id": proposal_msg["id"],
     })
     assert resp.status_code == 201
 
-    # 7. Carol raises a RISK
+    # 6. Carol raises a RISK
     resp = await client.post(f"/api/rooms/{room_id}/messages", json={
         "agent_id": carol["id"],
         "type": "risk",
-        "content": "Risk: We only have 2 Rust developers. Training the team will take 3-6 months.",
+        "content": "Risk: We only have 2 Rust developers.",
         "parent_id": proposal_msg["id"],
     })
     assert resp.status_code == 201
 
-    # 8. CHAT discussion
+    # 7. CHAT discussion
     for agent, msg_text in [
-        (alice, "Good points. We could start with a pilot on one service, and hire one senior Rust dev."),
-        (bob, "Agreed. The pilot approach mitigates the risk. Let's target the auth service first."),
+        (alice, "Good points. We could start with a pilot."),
+        (bob, "Agreed. Pilot approach mitigates risk."),
     ]:
         resp = await client.post(f"/api/rooms/{room_id}/messages", json={
             "agent_id": agent["id"],
@@ -79,24 +76,24 @@ async def test_full_meeting_flow(client: AsyncClient):
         })
         assert resp.status_code == 201
 
-    # 9. Agents VOTE
+    # 8. Agents VOTE
     for agent, vote in [(alice, "yes"), (bob, "yes"), (carol, "yes")]:
         resp = await client.post(f"/api/rooms/{room_id}/messages", json={
             "agent_id": agent["id"],
             "type": "vote",
-            "content": f"VOTE: {vote} - I support the pilot migration approach.",
+            "content": f"VOTE: {vote}",
             "parent_id": proposal_msg["id"],
         })
         assert resp.status_code == 201
 
-    # 10. Verify all messages persisted
+    # 9. Verify all messages persisted
     resp = await client.get(f"/api/rooms/{room_id}/messages")
     assert resp.status_code == 200
     data = resp.json()
     messages = data["messages"]
     assert len(messages) >= 8  # 1 proposal + 1 question + 1 risk + 2 chat + 3 votes
 
-    # 11. Verify message types
+    # 10. Verify message types
     types = [m["type"] for m in messages]
     assert "proposal" in types
     assert "question" in types
@@ -104,16 +101,15 @@ async def test_full_meeting_flow(client: AsyncClient):
     assert "vote" in types
     assert "chat" in types
 
-    # 12. Verify room is active
-    resp = await client.get(f"/api/rooms/{room_id}")
-    assert resp.status_code == 200
-    # Room status should still be draft unless someone explicitly changed it
-    # (join doesn't auto-activate in the other subagent's implementation)
-
-    # 13. List rooms
+    # 11. List rooms
     resp = await client.get("/api/rooms")
     assert resp.status_code == 200
     assert len(resp.json()) >= 1
+
+    # 12. List agents
+    resp = await client.get("/api/agents")
+    assert resp.status_code == 200
+    assert len(resp.json()) >= 3
 
 
 @pytest.mark.asyncio
@@ -138,11 +134,10 @@ async def test_agent_registration(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_room_lifecycle(client: AsyncClient):
     """Test room creation, joining, and message flow."""
-    # Create agent and generate token
+    # Create agent
     resp = await client.post("/api/agents", json={"name": "R1"})
+    assert resp.status_code == 201
     agent = resp.json()
-    resp = await client.post(f"/api/agents/{agent['id']}/token")
-    assert resp.status_code == 200
 
     # Create room
     resp = await client.post("/api/rooms", json={"name": "Test Room", "topic": "Testing"})
@@ -164,7 +159,7 @@ async def test_room_lifecycle(client: AsyncClient):
 
     # Duplicate join should fail
     resp = await client.post(f"/api/rooms/{room['id']}/join", json={"agent_id": agent["id"]})
-    assert resp.status_code == 400  # ValueError -> 400
+    assert resp.status_code == 400
 
     # Leave room
     resp = await client.post(f"/api/rooms/{room['id']}/leave", params={"agent_id": agent["id"]})

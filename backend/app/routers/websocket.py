@@ -21,11 +21,19 @@ _connections: dict[str, set[tuple]] = {}
 
 
 async def _authenticate(token: str, db: AsyncSession) -> Optional[Agent]:
+    """Authenticate agent by token (checks auth_token field)."""
+    # First try direct token match
+    from app.services.agent_service import validate_token
+    agent = await validate_token(db, token)
+    if agent:
+        return agent
+    # Fallback: check auth_token field directly
     result = await db.execute(select(Agent).where(Agent.auth_token == token))
     return result.scalar_one_or_none()
 
 
 async def _broadcast_to_room(room_id: str, event: dict, exclude_agent: Optional[str] = None) -> None:
+    """Send an event to all connected WebSockets in a room."""
     conns = _connections.get(room_id, set())
     payload = json.dumps(event, default=str)
     dead = []
@@ -44,7 +52,7 @@ async def _on_event(event: Event) -> None:
     """Event bus subscriber — forwards events to WebSocket clients."""
     room_id = event.data.get("room_id")
     if room_id:
-        await _broadcast_to_room(room_id, {
+        await _broadcast_to_room(str(room_id), {
             "event": event.type,
             "data": event.data,
         })
@@ -65,13 +73,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
     Auth via ?token= query param.
     On connect: verify membership, send recent messages.
     On message: parse, persist, run moderator, broadcast.
+    Broadcast events: new_message, agent_joined, agent_left, decision_made, action_item_created.
     """
+    # Authenticate
     async with async_session_factory() as db:
         agent = await _authenticate(token, db)
         if not agent:
             await websocket.close(code=4001, reason="Invalid token")
             return
 
+        # Verify room membership
         result = await db.execute(
             select(RoomMember).where(
                 RoomMember.room_id == room_id,
@@ -82,6 +93,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
             await websocket.close(code=4003, reason="Not a room member")
             return
 
+        # Get recent messages
         msgs = await db.execute(
             select(Message)
             .where(Message.room_id == room_id)
@@ -90,11 +102,13 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
         )
         recent = list(reversed(msgs.scalars().all()))
 
+    # Accept connection
     await websocket.accept()
 
+    # Register connection
     if room_id not in _connections:
         _connections[room_id] = set()
-    conn = (websocket, agent.id)
+    conn = (websocket, str(agent.id))
     _connections[room_id].add(conn)
 
     # Send recent messages
@@ -102,22 +116,23 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
         await websocket.send_text(json.dumps({
             "event": "recent_message",
             "data": {
-                "id": msg.id,
-                "room_id": msg.room_id,
-                "agent_id": msg.agent_id,
+                "id": str(msg.id),
+                "room_id": str(msg.room_id),
+                "agent_id": str(msg.agent_id),
                 "type": msg.type,
                 "content": msg.content,
-                "parent_id": msg.parent_id,
+                "parent_id": str(msg.parent_id) if msg.parent_id else None,
                 "created_at": msg.created_at.isoformat() if msg.created_at else None,
             },
         }, default=str))
 
-    # Notify room
+    # Notify room of new join
     await _broadcast_to_room(room_id, {
         "event": "agent_joined",
-        "data": {"agent_id": agent.id, "agent_name": agent.name},
-    }, exclude_agent=agent.id)
+        "data": {"agent_id": str(agent.id), "agent_name": agent.name},
+    }, exclude_agent=str(agent.id))
 
+    # Main message loop
     try:
         while True:
             raw = await websocket.receive_text()
@@ -151,19 +166,19 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
                 db.add(msg)
                 await db.flush()
 
-                msg_id = msg.id
+                msg_id = str(msg.id)
 
                 # Moderator analysis
                 mod = moderator_manager.get(room_id)
                 mod_actions = await mod.on_message_posted(msg, db)
 
-            # Broadcast
+            # Broadcast to room
             await _broadcast_to_room(room_id, {
                 "event": "new_message",
                 "data": {
                     "id": msg_id,
                     "room_id": room_id,
-                    "agent_id": agent.id,
+                    "agent_id": str(agent.id),
                     "agent_name": agent.name,
                     "type": msg_type,
                     "content": content,
@@ -184,7 +199,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
                         )
                         db.add(decision)
                         await db.flush()
-                        decision_id = decision.id
+                        decision_id = str(decision.id)
 
                     await _broadcast_to_room(room_id, {
                         "event": "decision_made",
@@ -193,6 +208,13 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
                             "proposal_id": action["proposal_id"],
                         },
                     })
+
+                    await event_bus.publish(Event("decision_created", {
+                        "room_id": room_id,
+                        "decision_id": decision_id,
+                        "proposal_id": action["proposal_id"],
+                    }))
+
                 else:
                     await _broadcast_to_room(room_id, {
                         "event": "moderator_action",
@@ -207,7 +229,13 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
         _connections.get(room_id, set()).discard(conn)
         if not _connections.get(room_id):
             _connections.pop(room_id, None)
+
         await _broadcast_to_room(room_id, {
             "event": "agent_left",
-            "data": {"agent_id": agent.id, "agent_name": agent.name},
+            "data": {"agent_id": str(agent.id), "agent_name": agent.name},
         })
+
+        await event_bus.publish(Event("agent_left_room", {
+            "room_id": room_id,
+            "agent_id": str(agent.id),
+        }))

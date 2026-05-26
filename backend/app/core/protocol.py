@@ -1,10 +1,8 @@
-"""Meeting protocol definitions — enums, validation rules.
-
-This module must NOT import from app.models to avoid circular imports.
-Models import enums from here.
-"""
+"""Meeting protocol definitions — enums, validation rules."""
 
 import enum
+
+from app.models.message import MessageType
 
 
 class RoomStatus(str, enum.Enum):
@@ -17,19 +15,6 @@ class MemberRole(str, enum.Enum):
     MODERATOR = "moderator"
     PARTICIPANT = "participant"
     OBSERVER = "observer"
-
-
-class MessageType(str, enum.Enum):
-    CHAT = "chat"
-    QUESTION = "question"
-    PROPOSAL = "proposal"
-    OBJECTION = "objection"
-    RISK = "risk"
-    DECISION = "decision"
-    ACTION_ITEM = "action_item"
-    VOTE = "vote"
-    SUMMARY = "summary"
-    REQUEST_CTX = "request_ctx"
 
 
 class DecisionStatus(str, enum.Enum):
@@ -51,10 +36,7 @@ VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "archived": set(),
 }
 
-# Message types that require a parent_id (must be in a thread)
 THREAD_MESSAGE_TYPES = {MessageType.OBJECTION, MessageType.VOTE}
-
-# Message types that can only be posted by moderators
 MODERATOR_ONLY_TYPES = {MessageType.DECISION, MessageType.SUMMARY, MessageType.ACTION_ITEM}
 
 

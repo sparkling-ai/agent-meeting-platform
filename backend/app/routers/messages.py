@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.protocol import MessageType
+from app.models.message import MessageType
 from app.schemas import MessageCreate, MessageListResponse, MessageResponse
 from app.services import message_service
 
