@@ -1,6 +1,7 @@
 """LLM-powered meeting moderator — state machine engine with turn management,
 loop detection, topic drift, inclusion, investigation budgets, and LLM integration."""
 
+import json
 import logging
 import uuid
 from collections import defaultdict, deque
@@ -307,9 +308,17 @@ class ModeratorEngine:
             parent_id = str(message.parent_id) if message.parent_id else None
             if parent_id and parent_id in self.state.active_proposals:
                 proposal = self.state.active_proposals[parent_id]
+                # Parse vote choice: handle both "yes" and JSON {"vote": "yes", ...}
+                vote_choice = content.lower().strip()
+                try:
+                    parsed = json.loads(vote_choice)
+                    if isinstance(parsed, dict):
+                        vote_choice = str(parsed.get("vote", vote_choice)).lower().strip()
+                except (json.JSONDecodeError, TypeError):
+                    pass
                 proposal.votes.append({
                     "agent_id": agent_id,
-                    "choice": content.lower().strip(),
+                    "choice": vote_choice,
                     "reasoning": (message.metadata_ or {}).get("reasoning", ""),
                 })
                 # Check if all members have voted

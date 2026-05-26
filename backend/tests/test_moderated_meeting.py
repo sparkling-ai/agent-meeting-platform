@@ -152,7 +152,7 @@ def parse_json_response(raw: str) -> dict:
 
 async def get_moderator_state(client: httpx.AsyncClient, room_id: str) -> dict | None:
     """Get moderator state, returns None if endpoint not available."""
-    resp = await client.get(MODERATOR_STATE_URL.format(room_id=room_id))
+    resp = await client.get(f"{BASE_URL}{MODERATOR_STATE_URL}".format(room_id=room_id))
     if resp.status_code == 200:
         return resp.json()
     return None
@@ -312,7 +312,7 @@ async def run_moderated_meeting_test():
         moderator_available = False
         moderator_agent_id = None
 
-        start_url = MODERATOR_START_URL.format(room_id=room_id)
+        start_url = f"{BASE_URL}{MODERATOR_START_URL}".format(room_id=room_id)
         resp = await client.post(start_url, json={"agenda": AGENDA})
 
         if resp.status_code in (200, 201):
@@ -506,7 +506,7 @@ async def run_moderated_meeting_test():
         investigation_topic = "Check OAuth2 security best practices for magic link implementation"
 
         # Try the investigation API endpoint
-        investigate_url = MODERATOR_INVESTIGATE_URL.format(room_id=room_id)
+        investigate_url = f"{BASE_URL}{MODERATOR_INVESTIGATE_URL.format(room_id=room_id)}"
         resp = await client.post(investigate_url, json={
             "agent_id": investigation_agent_id,
             "topic": investigation_topic,
@@ -533,7 +533,7 @@ async def run_moderated_meeting_test():
         if investigation_approved:
             # Post investigation request message
             await post_message(
-                client, room_id, investigation_agent_id, "investigation_request",
+                client, room_id, investigation_agent_id, "request_ctx",
                 f"I need to research: {investigation_topic}. Estimated time: 2 minutes.",
             )
             print(f"  📤 Investigation request posted")
@@ -549,7 +549,7 @@ async def run_moderated_meeting_test():
 
             # Post investigation result
             await post_message(
-                client, room_id, investigation_agent_id, "investigation_result",
+                client, room_id, investigation_agent_id, "chat",
                 f"Investigation findings: {findings}",
             )
             print(f"  📊 Investigation results posted")
@@ -595,7 +595,7 @@ async def run_moderated_meeting_test():
         results.ok("votes_cast")
 
         # Try moderator vote endpoint
-        vote_url = MODERATOR_VOTE_URL.format(room_id=room_id)
+        vote_url = f"{BASE_URL}{MODERATOR_VOTE_URL.format(room_id=room_id)}"
         resp = await client.post(vote_url, json={
             "proposal_id": proposal_id,
         })
@@ -655,7 +655,7 @@ async def run_moderated_meeting_test():
         # ═══════════════════════════════════════════════════════════════
         print("\n🏁 Phase 6: Close Meeting")
 
-        close_url = MODERATOR_CLOSE_URL.format(room_id=room_id)
+        close_url = f"{BASE_URL}{MODERATOR_CLOSE_URL.format(room_id=room_id)}"
         resp = await client.post(close_url)
 
         if resp.status_code in (200, 201):
