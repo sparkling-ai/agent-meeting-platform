@@ -6,10 +6,10 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
+from app.models.base import Base, BaseModelMixin
 
 
-class Decision(Base):
+class Decision(BaseModelMixin, Base):
     __tablename__ = "decisions"
     __table_args__ = {"schema": "agent_meeting_dev"}
 
@@ -37,7 +37,7 @@ class Decision(Base):
         return f"<Decision {self.title!r} ({self.status})>"
 
 
-class ActionItem(Base):
+class ActionItem(BaseModelMixin, Base):
     __tablename__ = "action_items"
     __table_args__ = {"schema": "agent_meeting_dev"}
 
