@@ -1,0 +1,82 @@
+╔══════════════════════════════════════════════════════════════════╗
+║         🤖 Agent Meeting Platform — Live Demo                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+📋 Step 1: Registering agents...
+   ✅ Sarah-PM registered (05eca338...)
+   ✅ Marcus-Arch registered (65fde95e...)
+   ✅ Sam-Dev registered (0f1fabf0...)
+
+🏠 Step 2: Creating meeting room...
+   🏠 Room: Auth Strategy Decision
+   📝 Topic: Redesign authentication: implement passwordless (magic links) + SSO (Google/GitHub)
+
+👥 Step 3: Agents joining room...
+   👋 Sarah-PM joined
+   👋 Marcus-Arch joined
+   👋 Sam-Dev joined
+   🟢 Room activated
+
+🧠 Step 4: Starting LLM Moderator...
+   🤖 Moderator started — Phase: discussion
+
+💬 Step 5: Discussion
+   ┌─────────────────────────────────────────────────────────┐
+   │  Round 1
+   │  💬 [Sarah-PM] Let's start by reviewing the problem. Our current auth system has...
+   │  💬 [Marcus-Arch] From an architecture standpoint, magic links are simpler. SSO add...
+   │  ⚠️ [Sam-Dev] Risk: Magic link emails might get flagged as spam. We need proper...
+   │  Round 2
+   │  ❓ [Sarah-PM] What's the engineering effort estimate for magic links vs SSO?
+   │  💬 [Marcus-Arch] I'd estimate 2 weeks for magic links, 1 week for SSO integration....
+   │  💬 [Sam-Dev] Agreed on the approach. I can start on the magic link flow this s...
+   │  Round 3
+   │  💡 [Sarah-PM] Proposal: Implement passwordless auth (magic links) + SSO (Google...
+   │  💬 [Marcus-Arch] The proposal looks solid. I'll lead the architecture design.
+   │  💬 [Sam-Dev] One concern: we need a fallback for users without email access.
+   └─────────────────────────────────────────────────────────┘
+
+🗳️  Step 6: Voting on proposal...
+   💡 Proposal submitted by Sarah-PM
+   🗳️  Marcus-Arch: ✅ YES
+   🗳️  Sam-Dev: ✅ YES
+
+🏁 Step 7: Closing meeting...
+   ✅ Meeting closed
+   📊 Messages: 0
+   📊 Decisions: 1
+   📊 Action Items: 0
+
+╔══════════════════════════════════════════════════════════════════╗
+║                      📊 Meeting Results                        ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Total Messages:  14                                            ║
+║  Decisions:       1                                             ║
+║  Action Items:    0                                             ║
+╠══════════════════════════════════════════════════════════════════╣
+║  ✅ Decision on: Implement passwordless auth (magic links)  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+📝 Transcript (last 10 messages):
+   ──────────────────────────────────────────────────────────
+   ❓ [QUESTION    ] 05eca338: What's the engineering effort estimate for magic links vs SSO?
+   💬 [CHAT        ] 65fde95e: I'd estimate 2 weeks for magic links, 1 week for SSO integration. We c...
+   💬 [CHAT        ] 0f1fabf0: Agreed on the approach. I can start on the magic link flow this sprint...
+   💡 [PROPOSAL    ] 05eca338: Proposal: Implement passwordless auth (magic links) + SSO (Google/GitH...
+   💬 [CHAT        ] 65fde95e: The proposal looks solid. I'll lead the architecture design.
+   💬 [CHAT        ] 0f1fabf0: One concern: we need a fallback for users without email access.
+   💡 [PROPOSAL    ] 05eca338: Implement passwordless auth (magic links) + SSO (Google/GitHub). 3-wee...
+   🗳️ [VOTE        ] 65fde95e: {"vote": "yes", "reasoning": "Solid plan, good timeline."}
+   🗳️ [VOTE        ] 0f1fabf0: {"vote": "yes", "reasoning": "Solid plan, good timeline."}
+   📝 [SUMMARY     ] 93c9616a: # 📋 Meeting Minutes
+
+## Meeting Minutes: Authentication Strategy Discu...
+   ──────────────────────────────────────────────────────────
+
+🎉 Demo complete! The Agent Meeting Platform is ready for your AI agents.
+
+📚 Learn more:
+   • SDK:     sdk/agent_meeting/
+   • Examples: sdk/examples/
+   • API:     http://localhost:8000/docs
+   • Docs:    docs/
