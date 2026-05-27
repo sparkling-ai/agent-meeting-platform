@@ -432,6 +432,64 @@ class OpenClawMeetingBridge:
         """Get decisions from this meeting."""
         return await self._client.get_decisions(self._room_id)
 
+    async def get_action_items(self) -> list[ActionItem]:
+        """Get action items from this meeting.
+
+        Returns list of ActionItem with fields:
+        - id, room_id, title, description, assignee_agent_id, status, due_at
+        """
+        return await self._client.get_action_items(self._room_id)
+
+    async def get_meeting_summary(self) -> dict:
+        """Get a full meeting summary including decisions, action items, and transcript.
+
+        Returns dict with:
+        - room: Room info
+        - messages: list of Message
+        - decisions: list of Decision
+        - action_items: list of ActionItem
+        - total_messages: int
+        """
+        messages, total = await self._client.get_messages(self._room_id, limit=200)
+        decisions = await self._client.get_decisions(self._room_id)
+        action_items = await self._client.get_action_items(self._room_id)
+
+        return {
+            "room": {
+                "id": str(self._room_id),
+                "name": self._room.name if self._room else "Unknown",
+                "topic": self._room.topic if self._room else "",
+            },
+            "messages": [
+                {
+                    "agent_name": m.agent_name or m.agent_id[:8],
+                    "type": m.type,
+                    "content": m.content,
+                    "created_at": str(m.created_at),
+                }
+                for m in messages
+            ],
+            "decisions": [
+                {
+                    "title": d.title,
+                    "description": d.description,
+                    "status": d.status,
+                }
+                for d in decisions
+            ],
+            "action_items": [
+                {
+                    "title": a.title,
+                    "description": a.description,
+                    "assignee": a.assignee_agent_id,
+                    "status": a.status,
+                    "due_at": a.due_at,
+                }
+                for a in action_items
+            ],
+            "total_messages": total,
+        }
+
     async def get_messages(self, limit: int = 50, offset: int = 0) -> tuple[list[Message], int]:
         """Get messages from the meeting."""
         return await self._client.get_messages(self._room_id, limit=limit, offset=offset)
