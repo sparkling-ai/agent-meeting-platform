@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.database import get_db
 from app.models.message import MessageType
@@ -33,8 +34,19 @@ async def get_messages(
     messages, total = await message_service.get_messages(
         db, room_id, limit=limit, offset=offset, msg_type=type, parent_id=parent_id, agent_id=agent_id,
     )
+    # Enrich messages with agent names
+    enriched = []
+    for m in messages:
+        resp = MessageResponse.model_validate(m)
+        if resp.agent_id:
+            from app.models.agent import Agent
+            agent_result = await db.execute(
+                select(Agent.name).where(Agent.id == resp.agent_id)
+            )
+            resp.agent_name = agent_result.scalar()
+        enriched.append(resp)
     return MessageListResponse(
-        messages=[MessageResponse.model_validate(m) for m in messages],
+        messages=enriched,
         total=total,
         offset=offset,
         limit=limit,

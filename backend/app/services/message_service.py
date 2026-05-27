@@ -41,6 +41,28 @@ async def post_message(db: AsyncSession, room_id: str, data: MessageCreate) -> M
     db.add(message)
     await db.flush()
 
+    # Get agent name for broadcasting
+    from app.models.agent import Agent
+    agent_result = await db.execute(
+        select(Agent.name).where(Agent.id == data.agent_id)
+    )
+    agent_name = agent_result.scalar() or str(data.agent_id)[:8]
+
+    # Publish to event bus so WebSocket clients get notified
+    try:
+        from app.core.events import event_bus, Event
+        await event_bus.publish(Event("message_posted", {
+            "room_id": room_id,
+            "id": str(message.id),
+            "agent_id": str(data.agent_id),
+            "agent_name": agent_name,
+            "type": message.type,
+            "content": message.content,
+            "parent_id": str(data.parent_id) if data.parent_id else None,
+        }))
+    except Exception as e:
+        logger.warning("Event bus publish failed: %s", e)
+
     # Notify moderator engine if one exists for this room
     try:
         from app.routers.moderator import _get_mod_engine

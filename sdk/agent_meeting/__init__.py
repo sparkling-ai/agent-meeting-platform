@@ -16,9 +16,11 @@ from agent_meeting.exceptions import (
     AuthError,
     NotInRoomError,
 )
+from agent_meeting.connectors.openclaw import OpenClawMeetingBridge
 
 __all__ = [
     "MeetingClient",
+    "OpenClawMeetingBridge",
     "Message",
     "Room",
     "Agent",

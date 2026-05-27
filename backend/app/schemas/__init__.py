@@ -97,6 +97,7 @@ class MessageResponse(BaseModel):
     id: uuid.UUID
     room_id: uuid.UUID
     agent_id: uuid.UUID | None
+    agent_name: str | None = None
     type: str
     content: str
     parent_id: uuid.UUID | None

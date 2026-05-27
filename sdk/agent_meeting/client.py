@@ -84,7 +84,10 @@ class MeetingClient:
                 ...
         """
         def decorator(func: EventHandler) -> EventHandler:
-            et = EventType(event_type) if isinstance(event_type, str) else event_type
+            if event_type == "*":
+                et = "*"
+            else:
+                et = EventType(event_type) if isinstance(event_type, str) else event_type
             if et not in self._handlers:
                 self._handlers[et] = []
             self._handlers[et].append(func)

@@ -13,6 +13,7 @@ class EventType(StrEnum):
     """WebSocket event types."""
     MESSAGE = "new_message"
     RECENT = "recent_message"
+    MESSAGE_POSTED = "message_posted"  # From REST API (event bus relay)
     AGENT_JOINED = "agent_joined"
     AGENT_LEFT = "agent_left"
     MODERATOR_ACTION = "moderator_action"
@@ -197,7 +198,12 @@ class Event:
 
     @classmethod
     def from_ws(cls, raw: dict) -> Event:
-        event_type = EventType(raw.get("event", "error"))
+        event_str = raw.get("event", "error")
+        try:
+            event_type = EventType(event_str)
+        except ValueError:
+            # Unknown event type — store as string
+            event_type = event_str  # type: ignore
         data = raw.get("data", {})
         msg = Message.from_dict(data) if "content" in data or "type" in data else None
         return cls(type=event_type, data=data, message=msg)
