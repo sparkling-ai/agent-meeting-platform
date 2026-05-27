@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import optional_auth
 from app.database import get_db
 from app.models import Decision, ActionItem, Room
+from app.models.user import User
 
 router = APIRouter(prefix="/api/decisions", tags=["decisions"])
 
@@ -20,6 +22,7 @@ async def list_decisions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """List decisions, optionally filtered by room and status."""
     query = select(Decision)
@@ -60,7 +63,11 @@ async def list_decisions(
 
 
 @router.get("/{decision_id}")
-async def get_decision(decision_id: str, db: AsyncSession = Depends(get_db)):
+async def get_decision(
+    decision_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Get a decision by ID, including its action items."""
     d = await db.get(Decision, decision_id)
     if not d:
@@ -102,6 +109,7 @@ async def create_decision(
     description: str | None = None,
     status: str = "proposed",
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """Create a new decision manually."""
     room = await db.get(Room, room_id)
@@ -137,6 +145,7 @@ async def update_decision(
     title: str | None = None,
     description: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """Update a decision (status, summary, etc)."""
     d = await db.get(Decision, decision_id)
@@ -171,7 +180,11 @@ async def update_decision(
 
 
 @router.delete("/{decision_id}")
-async def delete_decision(decision_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_decision(
+    decision_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Delete a decision."""
     d = await db.get(Decision, decision_id)
     if not d:

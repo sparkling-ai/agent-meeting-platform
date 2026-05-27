@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     import app.models.room  # noqa: F401
     import app.models.message  # noqa: F401
     import app.models.decision  # noqa: F401
+    import app.models.user  # noqa: F401
     from app.models.base import Base
 
     async with engine.begin() as conn:
@@ -48,6 +49,7 @@ app.add_middleware(
 
 from app.routers import agents, messages, rooms, websocket  # noqa: E402
 from app.routers import admin, decisions, action_items, moderator  # noqa: E402
+from app.routers import auth  # noqa: E402
 
 app.include_router(rooms.router)
 app.include_router(agents.router)
@@ -57,6 +59,7 @@ app.include_router(admin.router)
 app.include_router(decisions.router)
 app.include_router(action_items.router)
 app.include_router(moderator.router)
+app.include_router(auth.router)
 
 
 @app.get("/health")

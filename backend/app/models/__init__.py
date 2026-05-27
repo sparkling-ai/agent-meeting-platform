@@ -5,6 +5,7 @@ from app.models.base import Base
 from app.models.decision import ActionItem, Decision
 from app.models.message import Message, MessageType, RoomMember
 from app.models.room import Room
+from app.models.user import ApiKey, User
 
 __all__ = [
     "Base",
@@ -15,4 +16,6 @@ __all__ = [
     "MessageType",
     "Decision",
     "ActionItem",
+    "User",
+    "ApiKey",
 ]

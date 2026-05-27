@@ -4,14 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_user, optional_auth, require_admin
 from app.database import get_db
 from app.models import Agent, Room, RoomMember, Message, Decision, ActionItem
+from app.models.user import User
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/stats")
-async def dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Get admin dashboard statistics."""
     room_count = (await db.execute(select(func.count()).select_from(Room))).scalar()
     active_rooms = (await db.execute(
@@ -55,7 +60,11 @@ async def dashboard_stats(db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/rooms/{room_id}")
-async def delete_room(room_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_room(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     """Delete a room and all its data (messages, members, decisions, action items)."""
     room = await db.get(Room, room_id)
     if not room:
@@ -66,7 +75,11 @@ async def delete_room(room_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/agents/{agent_id}")
-async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_agent(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     """Delete an agent and remove from all rooms."""
     agent = await db.get(Agent, agent_id)
     if not agent:
@@ -81,7 +94,13 @@ async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/rooms/{room_id}/bulk-join")
-async def bulk_join_room(room_id: str, agent_ids: list[str], role: str = "participant", db: AsyncSession = Depends(get_db)):
+async def bulk_join_room(
+    room_id: str,
+    agent_ids: list[str],
+    role: str = "participant",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Add multiple agents to a room at once."""
     room = await db.get(Room, room_id)
     if not room:
@@ -110,7 +129,10 @@ async def bulk_join_room(room_id: str, agent_ids: list[str], role: str = "partic
 
 
 @router.post("/reset-dev")
-async def reset_dev_data(db: AsyncSession = Depends(get_db)):
+async def reset_dev_data(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     """Reset all data in the dev schema (dangerous — dev only!)."""
     for table in [ActionItem, Decision, Message, RoomMember, Room, Agent]:
         await db.execute(table.__table__.delete())

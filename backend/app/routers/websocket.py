@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
 from app.models import Agent, RoomMember, Message
+from app.models.user import User
 from app.core.events import event_bus, Event
 from app.services.moderator_service import moderator_manager, MeetingPhase
+from app.auth.jwt import verify_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
@@ -21,13 +23,34 @@ _connections: dict[str, set[tuple]] = {}
 
 
 async def _authenticate(token: str, db: AsyncSession) -> Optional[Agent]:
-    """Authenticate agent by token (checks auth_token field)."""
-    # First try direct token match
+    """Authenticate agent by token — supports both legacy agent tokens and JWT tokens."""
+    # First try JWT token (new auth system)
+    payload = verify_token(token)
+    if payload is not None:
+        user_id = payload.get("sub")
+        if user_id:
+            import uuid as _uuid
+            try:
+                user = await db.get(User, _uuid.UUID(user_id))
+            except (ValueError, TypeError):
+                user = None
+            if user and user.is_active:
+                # For JWT-authenticated users, find or create a corresponding agent
+                # This allows WebSocket connections for authenticated users
+                result = await db.execute(
+                    select(Agent).where(Agent.owner_id == str(user.id))
+                )
+                agent = result.scalars().first()
+                if agent:
+                    return agent
+        return None
+
+    # Fallback: legacy agent token
     from app.services.agent_service import validate_token
     agent = await validate_token(db, token)
     if agent:
         return agent
-    # Fallback: check auth_token field directly
+    # Last resort: check auth_token field directly
     result = await db.execute(select(Agent).where(Agent.auth_token == token))
     return result.scalar_one_or_none()
 

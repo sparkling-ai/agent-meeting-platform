@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,10 @@ class Room(BaseModelMixin, Base):
     )
     settings: Mapped[dict | None] = mapped_column(JSONB)
     created_by: Mapped[str | None] = mapped_column(String(36))
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agent_meeting_dev.users.id", use_alter=True, ondelete="SET NULL"),
+        nullable=True,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -42,11 +42,18 @@ class MeetingClient:
         name: str = "Agent",
         capabilities: dict[str, Any] | None = None,
         connector_type: str = "sdk",
+        api_key: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         self.server_url = server_url
         self.name = name
         self.capabilities = capabilities or {}
         self.connector_type = connector_type
+        self._api_key = api_key
+        self._username = username
+        self._password = password
+        self._jwt_token: str | None = None
 
         self._transport = Transport(server_url)
         self._agent: Agent | None = None
@@ -116,9 +123,22 @@ class MeetingClient:
     async def register(self) -> Agent:
         """Register this agent with the meeting server.
 
+        If api_key or username/password provided, authenticates first.
         Returns:
             Agent object with ID and auth token.
         """
+        # Authenticate if credentials provided
+        if self._api_key:
+            self._transport.api_key = self._api_key
+        elif self._username and self._password:
+            auth_data = await self._transport.post("/api/auth/login", json_data={
+                "username": self._username,
+                "password": self._password,
+            })
+            self._jwt_token = auth_data["access_token"]
+            self._transport.token = self._jwt_token
+            logger.info("Logged in as %s", self._username)
+
         data = await self._transport.post("/api/agents", json_data={
             "name": self.name,
             "connector_type": self.connector_type,
@@ -126,9 +146,10 @@ class MeetingClient:
         })
         self._agent = Agent.from_dict(data)
 
-        # Get auth token
-        token_data = await self._transport.post(f"/api/agents/{self.agent_id}/token")
-        self._transport.token = token_data.get("token", "")
+        # Get auth token (only if no JWT auth)
+        if not self._jwt_token:
+            token_data = await self._transport.post(f"/api/agents/{self.agent_id}/token")
+            self._transport.token = token_data.get("token", "")
 
         logger.info("Registered as %s (%s)", self.name, self.agent_id[:8])
         return self._agent

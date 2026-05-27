@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import optional_auth
 from app.database import get_db
 from app.models import Agent, Room, RoomMember, Message
+from app.models.user import User
 from app.services.moderator_service import moderator_manager, MeetingPhase
 from app.core.protocol import MessageType
 from app.core.events import event_bus, Event
@@ -89,8 +91,12 @@ async def _ensure_moderator_agent(room_id: str, db: AsyncSession) -> Agent:
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/start")
-async def start_meeting(room_id: str, data: StartMeetingRequest = None,
-                        db: AsyncSession = Depends(get_db)):
+async def start_meeting(
+    room_id: str,
+    data: StartMeetingRequest = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Start the meeting — transitions from DRAFT to OPENING to DISCUSSION."""
     room, engine = await _get_room_and_mod(room_id, db)
 
@@ -142,7 +148,11 @@ async def start_meeting(room_id: str, data: StartMeetingRequest = None,
 
 
 @router.post("/advance")
-async def advance_agenda(room_id: str, db: AsyncSession = Depends(get_db)):
+async def advance_agenda(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Advance to the next agenda item."""
     _, engine = await _get_room_and_mod(room_id, db)
 
@@ -168,8 +178,12 @@ async def advance_agenda(room_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/vote")
-async def initiate_vote(room_id: str, data: VoteRequest = None,
-                        db: AsyncSession = Depends(get_db)):
+async def initiate_vote(
+    room_id: str,
+    data: VoteRequest = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Initiate a formal vote on a proposal."""
     _, engine = await _get_room_and_mod(room_id, db)
 
@@ -192,7 +206,11 @@ async def initiate_vote(room_id: str, data: VoteRequest = None,
 
 
 @router.post("/force-decision")
-async def force_decision(room_id: str, db: AsyncSession = Depends(get_db)):
+async def force_decision(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Force a decision when time has expired."""
     _, engine = await _get_room_and_mod(room_id, db)
 
@@ -214,7 +232,11 @@ async def force_decision(room_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/close")
-async def close_meeting(room_id: str, db: AsyncSession = Depends(get_db)):
+async def close_meeting(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Close the meeting and generate minutes."""
     room, engine = await _get_room_and_mod(room_id, db)
 
@@ -252,22 +274,34 @@ async def close_meeting(room_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/state")
-async def get_moderator_state(room_id: str, db: AsyncSession = Depends(get_db)):
+async def get_moderator_state(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Get current moderator state (phase, agenda, turns, etc.)."""
     _, engine = await _get_room_and_mod(room_id, db)
     return engine.get_state()
 
 
 @router.get("/summary")
-async def get_moderator_summary(room_id: str, db: AsyncSession = Depends(get_db)):
+async def get_moderator_summary(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Get current meeting summary."""
     _, engine = await _get_room_and_mod(room_id, db)
     return engine.get_summary()
 
 
 @router.post("/investigate")
-async def request_investigation(room_id: str, data: InvestigateRequest,
-                                 db: AsyncSession = Depends(get_db)):
+async def request_investigation(
+    room_id: str,
+    data: InvestigateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Agent requests investigation time."""
     _, engine = await _get_room_and_mod(room_id, db)
 
@@ -297,8 +331,12 @@ async def request_investigation(room_id: str, data: InvestigateRequest,
 
 
 @router.post("/park")
-async def park_topic(room_id: str, data: ParkRequest,
-                     db: AsyncSession = Depends(get_db)):
+async def park_topic(
+    room_id: str,
+    data: ParkRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Park a topic for later discussion."""
     _, engine = await _get_room_and_mod(room_id, db)
 

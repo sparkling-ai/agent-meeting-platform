@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     llm_model: str = "openrouter/google/gemini-2.5-flash"
     openrouter_api_key: str = ""
 
+    # Auth
+    secret_key: str = "change-me-in-production-use-a-256-bit-random-key"
+    access_token_expire_minutes: int = 1440  # 24 hours
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

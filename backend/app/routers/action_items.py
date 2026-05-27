@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import optional_auth
 from app.database import get_db
 from app.models import ActionItem
+from app.models.user import User
 
 router = APIRouter(prefix="/api/action-items", tags=["action-items"])
 
@@ -20,6 +22,7 @@ async def list_action_items(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """List action items with filters."""
     query = select(ActionItem)
@@ -69,6 +72,7 @@ async def create_action_item(
     status: str = "pending",
     due_at: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """Create a new action item."""
     ai = ActionItem(
@@ -102,6 +106,7 @@ async def update_action_item(
     description: str | None = None,
     due_at: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
 ):
     """Update an action item."""
     ai = await db.get(ActionItem, item_id)
@@ -133,7 +138,11 @@ async def update_action_item(
 
 
 @router.delete("/{item_id}")
-async def delete_action_item(item_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_action_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(optional_auth),
+):
     """Delete an action item."""
     ai = await db.get(ActionItem, item_id)
     if not ai:

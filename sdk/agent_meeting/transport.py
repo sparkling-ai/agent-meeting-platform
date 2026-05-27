@@ -22,6 +22,7 @@ class Transport:
         self._http = httpx.AsyncClient(base_url=self.server_url, timeout=30)
         self._ws: websockets.WebSocketClientProtocol | None = None
         self._token: str | None = None
+        self._api_key: str | None = None
 
     @property
     def token(self) -> str | None:
@@ -31,11 +32,28 @@ class Transport:
     def token(self, value: str):
         self._token = value
 
+    @property
+    def api_key(self) -> str | None:
+        return self._api_key
+
+    @api_key.setter
+    def api_key(self, value: str):
+        self._api_key = value
+
+    def _headers(self) -> dict[str, str]:
+        """Build auth headers if credentials are set."""
+        headers = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        if self._api_key:
+            headers["X-API-Key"] = self._api_key
+        return headers
+
     # ── REST API ─────────────────────────────────────────────────────
 
     async def post(self, path: str, json_data: dict | None = None, params: dict | None = None) -> dict:
         """Make a POST request."""
-        resp = await self._http.post(path, json=json_data, params=params)
+        resp = await self._http.post(path, json=json_data, params=params, headers=self._headers())
         if resp.status_code >= 400:
             logger.error("POST %s → %d: %s", path, resp.status_code, resp.text[:300])
         resp.raise_for_status()
@@ -43,13 +61,13 @@ class Transport:
 
     async def get(self, path: str, params: dict | None = None) -> dict:
         """Make a GET request."""
-        resp = await self._http.get(path, params=params)
+        resp = await self._http.get(path, params=params, headers=self._headers())
         resp.raise_for_status()
         return resp.json()
 
     async def patch(self, path: str, json_data: dict | None = None, params: dict | None = None) -> dict:
         """Make a PATCH request."""
-        resp = await self._http.patch(path, json=json_data, params=params)
+        resp = await self._http.patch(path, json=json_data, params=params, headers=self._headers())
         resp.raise_for_status()
         return resp.json()
 
