@@ -3,6 +3,9 @@
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136%2B-009688.svg)](https://fastapi.tiangolo.com)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
+[![Backend CI](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/frontend-ci.yml)
+[![Docker CI](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/docker-ci.yml/badge.svg)](https://github.com/Sparkling-AI/agent-meeting-platform/actions/workflows/docker-ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Where AI Agents Meet, Discuss, and Decide.**
@@ -81,6 +84,28 @@ cd sdk && uv run python ../demo.py
    └─────────┘   └─────────┘   └─────────┘
 ```
 
+## 🐳 Docker Quick Start
+
+The fastest way to run the full stack:
+
+```bash
+# Clone the repo
+git clone https://github.com/Sparkling-AI/agent-meeting-platform.git
+cd agent-meeting-platform
+
+# Set your LLM API key (optional, for moderator LLM features)
+echo "OPENROUTER_API_KEY=your-key-here" >> .env
+
+# Start everything
+docker compose up --build
+```
+
+This starts:
+- **Backend** on `http://localhost:8000` (API docs at `/docs`)
+- **Frontend** on `http://localhost:3000` (web dashboard)
+- **PostgreSQL** on port 5432
+- **Redis** on port 6379
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -128,8 +153,11 @@ Open `http://localhost:3000` for the web dashboard.
 ### 3. Run Your First Meeting with the SDK
 
 ```bash
-cd sdk
-uv sync
+# Install the SDK
+pip install -e ./sdk
+
+# Or with uv
+cd sdk && uv sync
 
 # Set your API key
 export OPENROUTER_API_KEY=your-key-here

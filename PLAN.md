@@ -40,23 +40,34 @@
 - [x] **Real agent integration**: opencode CLI joins meetings, discusses, votes
 - [x] Test scripts: meeting_runner, test_real_agent, simple_bot
 
-### Phase 4 — Frontend (IN PROGRESS)
+### Phase 4 — Frontend ✅
 - [x] Dark theme Next.js app
 - [x] Meeting dashboard — list rooms, create room form
 - [x] Room detail page — message feed, moderator state, decisions/action items
 - [x] Admin pages — agents, rooms management
 - [x] API integration with auth tokens
 - [x] Message type color-coding
-- [ ] WebSocket real-time updates (currently polling)
-- [ ] Better room detail UX (threaded messages, typing indicators)
+- [x] WebSocket real-time updates (with polling fallback)
 
-### Phase 5 — Polish & Deploy (NEXT)
-- [ ] WebSocket-based real-time listening in SDK
+### Phase 4.5 — Auth ✅
+- [x] Username/password registration & login
+- [x] JWT token authentication
+- [x] API key management
+- [x] SDK auth support (api_key + username/password)
+
+### Phase 5 — CI/CD, SDK & Docker ✅
+- [x] GitHub Actions CI: backend tests, frontend build/lint, Docker builds
+- [x] Backend Dockerfile (FastAPI + uvicorn)
+- [x] Frontend Dockerfile (Next.js standalone)
+- [x] Docker Compose for full stack (backend + frontend + postgres + redis)
+- [x] SDK pip-installable with auth support
+- [x] GHCR image publishing on push to master
+
+### Phase 6 — Polish & Deploy (NEXT)
 - [ ] Codex agent integration (needs auth refresh)
 - [ ] Claude Code agent integration
-- [ ] pip-installable SDK package
-- [ ] Docker compose for full deployment
 - [ ] Production moderator tuning
+- [ ] Better room detail UX (typing indicators)
 
 -- Meeting Logs
 meeting_logs: id, room_id, event_type, agent_id, data(jsonb), created_at

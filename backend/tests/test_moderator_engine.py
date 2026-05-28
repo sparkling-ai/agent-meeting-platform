@@ -138,7 +138,7 @@ class TestLoopDetection:
         agent_b = str(uuid.uuid4())
         for i in range(3):
             engine.state.message_history.append({"agent_id": agent_a if i % 2 == 0 else agent_b, "content": f"msg {i}", "type": "chat", "agent_name": "A"})
-        result = engine._check_loop_simple(agent_a)
+        result = engine._check_loop_escalated(agent_a, "test content")
         assert result is None
 
     def test_loop_detected_two_agents(self, engine):
@@ -157,10 +157,10 @@ class TestLoopDetection:
         engine.state.speak_counts[agent_b] = 4
 
         # Call multiple times to exceed threshold
-        result = engine._check_loop_simple(agent_a)
+        result = engine._check_loop_escalated(agent_a, "test content")
         # First call increments warning, may or may not trigger
         # The key is it eventually triggers
-        result = engine._check_loop_simple(agent_b)
+        result = engine._check_loop_escalated(agent_b, "test content")
         # After enough calls, should trigger
         # (depends on LOOP_DETECTION_THRESHOLD=2, so 2 calls to same pair)
         # The loop key resets after intervention
@@ -175,7 +175,7 @@ class TestLoopDetection:
                 "type": "chat",
                 "agent_name": f"Agent {i}",
             })
-        result = engine._check_loop_simple(str(uuid.uuid4()))
+        result = engine._check_loop_escalated(str(uuid.uuid4()), "test content")
         assert result is None
 
 
