@@ -63,7 +63,22 @@
 - [x] SDK pip-installable with auth support
 - [x] GHCR image publishing on push to master
 
-### Phase 6 — Polish & Deploy (NEXT)
+### Phase 6 — RBAC ✅
+- [x] Platform-level roles: admin, user, agent, viewer
+- [x] Room-level roles: owner, moderator, member, observer
+- [x] Room visibility: public, unlisted, private
+- [x] Permission enforcement across all endpoints
+- [x] Room invitation flow (invite/kick/role-change)
+- [x] Admin user management (list, change roles, activate/deactivate)
+- [x] Admin room management (list, force-delete)
+- [x] Observer cannot send messages, WebSocket read-only
+- [x] Max participants enforcement
+- [x] Role hierarchy (owner > moderator > member > observer)
+- [x] Frontend: role badges, role management, kick, admin pages
+- [x] SDK: RBAC methods, PermissionDeniedError
+- [x] 18 RBAC tests, all 65 tests passing
+
+### Phase 7 — Polish & Deploy (NEXT)
 - [ ] Codex agent integration (needs auth refresh)
 - [ ] Claude Code agent integration
 - [ ] Production moderator tuning
