@@ -16,6 +16,8 @@ async def create_room(db: AsyncSession, data: RoomCreate) -> Room:
         name=data.name,
         topic=data.topic,
         settings=data.settings or {},
+        visibility=data.visibility,
+        max_participants=data.max_participants,
     )
     db.add(room)
     await db.flush()
@@ -52,6 +54,14 @@ async def join_room(db: AsyncSession, room_id: str, data: RoomJoinRequest) -> Ro
     )
     if existing.scalar_one_or_none():
         raise ValueError("Agent is already a member of this room")
+
+    # Check max participants
+    member_count_result = await db.execute(
+        select(RoomMember).where(RoomMember.room_id == room_id)
+    )
+    current_members = list(member_count_result.scalars().all())
+    if len(current_members) >= room.max_participants:
+        raise ValueError("Room is full")
 
     member = RoomMember(room_id=room_id, agent_id=data.agent_id, role=data.role)
     db.add(member)

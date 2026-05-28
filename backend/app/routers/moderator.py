@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import optional_auth
+from app.auth.dependencies import get_current_user, optional_auth
+from app.auth.permissions import RoomRole, check_room_permission
 from app.database import get_db
 from app.models import Agent, Room, RoomMember, Message
 from app.models.user import User
@@ -98,6 +99,8 @@ async def start_meeting(
     current_user: User | None = Depends(optional_auth),
 ):
     """Start the meeting — transitions from DRAFT to OPENING to DISCUSSION."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MODERATOR)
     room, engine = await _get_room_and_mod(room_id, db)
 
     # Create/ensure moderator agent
@@ -154,6 +157,8 @@ async def advance_agenda(
     current_user: User | None = Depends(optional_auth),
 ):
     """Advance to the next agenda item."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MODERATOR)
     _, engine = await _get_room_and_mod(room_id, db)
 
     if engine.state.phase == MeetingPhase.CLOSED:
@@ -185,6 +190,8 @@ async def initiate_vote(
     current_user: User | None = Depends(optional_auth),
 ):
     """Initiate a formal vote on a proposal."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MODERATOR)
     _, engine = await _get_room_and_mod(room_id, db)
 
     proposal_id = data.proposal_id if data else None
@@ -212,6 +219,8 @@ async def force_decision(
     current_user: User | None = Depends(optional_auth),
 ):
     """Force a decision when time has expired."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MODERATOR)
     _, engine = await _get_room_and_mod(room_id, db)
 
     result = await engine.force_decision(db)
@@ -238,6 +247,8 @@ async def close_meeting(
     current_user: User | None = Depends(optional_auth),
 ):
     """Close the meeting and generate minutes."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MODERATOR)
     room, engine = await _get_room_and_mod(room_id, db)
 
     result = await engine.close_meeting(db)

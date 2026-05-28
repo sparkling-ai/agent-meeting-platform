@@ -35,6 +35,8 @@ class RoomCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     topic: str | None = None
     settings: dict | None = None
+    visibility: str = Field(default="unlisted", pattern="^(public|unlisted|private)$")
+    max_participants: int = Field(default=20, ge=1, le=100)
 
 
 class RoomResponse(BaseModel):
@@ -43,6 +45,9 @@ class RoomResponse(BaseModel):
     topic: str | None
     status: str
     settings: dict | None
+    visibility: str = "unlisted"
+    max_participants: int = 20
+    owner_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
@@ -61,11 +66,26 @@ class RoomDetailResponse(RoomResponse):
 
 class RoomJoinRequest(BaseModel):
     agent_id: uuid.UUID
-    role: str = "participant"
+    role: str = "member"
 
 
 class RoomStatusUpdate(BaseModel):
     status: str
+
+
+# RBAC
+class RoomInviteRequest(BaseModel):
+    agent_id: uuid.UUID
+    role: str = Field(default="member", pattern="^(owner|moderator|member|observer)$")
+
+
+class RoomRoleUpdate(BaseModel):
+    role: str = Field(..., pattern="^(owner|moderator|member|observer)$")
+
+
+class AdminUserUpdate(BaseModel):
+    role: str | None = Field(None, pattern="^(admin|user|agent|viewer)$")
+    is_active: bool | None = None
 
 
 # Message

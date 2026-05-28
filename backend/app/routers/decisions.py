@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import optional_auth
+from app.auth.dependencies import optional_auth, get_current_user
+from app.auth.permissions import RoomRole, check_room_permission
 from app.database import get_db
 from app.models import Decision, ActionItem, Room
 from app.models.user import User
@@ -112,6 +113,9 @@ async def create_decision(
     current_user: User | None = Depends(optional_auth),
 ):
     """Create a new decision manually."""
+    if current_user:
+        await check_room_permission(db, room_id, current_user, RoomRole.MEMBER)
+
     room = await db.get(Room, room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
@@ -148,6 +152,12 @@ async def update_decision(
     current_user: User | None = Depends(optional_auth),
 ):
     """Update a decision (status, summary, etc)."""
+    if current_user:
+        # Get room_id from decision
+        d_check = await db.get(Decision, decision_id)
+        if d_check:
+            await check_room_permission(db, str(d_check.room_id), current_user, RoomRole.MEMBER)
+
     d = await db.get(Decision, decision_id)
     if not d:
         raise HTTPException(status_code=404, detail="Decision not found")
@@ -186,6 +196,11 @@ async def delete_decision(
     current_user: User | None = Depends(optional_auth),
 ):
     """Delete a decision."""
+    if current_user:
+        d_check = await db.get(Decision, decision_id)
+        if d_check:
+            await check_room_permission(db, str(d_check.room_id), current_user, RoomRole.MODERATOR)
+
     d = await db.get(Decision, decision_id)
     if not d:
         raise HTTPException(status_code=404, detail="Decision not found")

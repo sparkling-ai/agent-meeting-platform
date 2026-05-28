@@ -390,13 +390,46 @@ export default function RoomView() {
             {room.members.map((m) => (
               <div key={m.agent_id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-800">
                 <span className="text-sm text-slate-300">🤖 {m.agent_name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  m.role === "moderator" ? "bg-purple-900 text-purple-300" :
-                  m.role === "observer" ? "bg-slate-700 text-slate-400" :
-                  "bg-blue-900 text-blue-300"
-                }`}>
-                  {m.role}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    m.role === "owner" ? "bg-yellow-900 text-yellow-300" :
+                    m.role === "moderator" ? "bg-purple-900 text-purple-300" :
+                    m.role === "observer" ? "bg-slate-700 text-slate-400" :
+                    "bg-blue-900 text-blue-300"
+                  }`}>
+                    {m.role}
+                  </span>
+                  {m.role !== "owner" && (
+                    <>
+                      <select
+                        className="bg-slate-800 border border-slate-600 rounded text-xs px-1 py-0.5 text-white"
+                        value={m.role}
+                        onChange={(e) => {
+                          if (e.target.value !== m.role) {
+                            roomsApi.updateRole(roomId, m.agent_id, e.target.value)
+                              .then(() => loadRoom())
+                              .catch((e) => setError(e.message));
+                          }
+                        }}
+                      >
+                        <option value="moderator">moderator</option>
+                        <option value="member">member</option>
+                        <option value="observer">observer</option>
+                      </select>
+                      <button
+                        className="text-red-400 hover:text-red-300 text-xs"
+                        onClick={() => {
+                          if (confirm(`Kick ${m.agent_name}?`)) {
+                            roomsApi.kick(roomId, m.agent_id)
+                              .then(() => loadRoom())
+                              .catch((e) => setError(e.message));
+                          }
+                        }}
+                        title="Kick member"
+                      >✕</button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -417,7 +450,7 @@ export default function RoomView() {
                       onChange={(e) => { if (e.target.value) handleJoin(a.id, e.target.value); }}
                     >
                       <option value="">Join as...</option>
-                      <option value="participant">Participant</option>
+                      <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
                       <option value="observer">Observer</option>
                     </select>

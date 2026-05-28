@@ -13,11 +13,12 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def register_agent(db: AsyncSession, data: AgentCreate) -> Agent:
+async def register_agent(db: AsyncSession, data: AgentCreate, owner_id: str | None = None) -> Agent:
     agent = Agent(
         name=data.name,
         connector_type=data.connector_type,
         capabilities=data.capabilities or {},
+        owner_id=owner_id,
     )
     db.add(agent)
     await db.flush()

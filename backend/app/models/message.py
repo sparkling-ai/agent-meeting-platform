@@ -23,7 +23,7 @@ class RoomMember(Base):
         ForeignKey("agent_meeting_dev.agents.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="participant"
+        String(50), nullable=False, default="member"
     )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

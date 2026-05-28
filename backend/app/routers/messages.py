@@ -1,10 +1,11 @@
-"""Message REST endpoints."""
+"""Message REST endpoints — RBAC-enforced."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.auth.dependencies import optional_auth
+from app.auth.dependencies import get_current_user, optional_auth
+from app.auth.permissions import RoomRole, check_room_permission
 from app.database import get_db
 from app.models.message import MessageType
 from app.models.user import User
@@ -21,6 +22,12 @@ async def post_message(
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(optional_auth),
 ):
+    """Post a message. Requires room membership with member role or above."""
+    if current_user:
+        _, membership = await check_room_permission(db, room_id, current_user, RoomRole.MEMBER)
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Must be a room member to post messages")
+
     try:
         msg = await message_service.post_message(db, room_id, data)
         return msg
@@ -39,6 +46,12 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(optional_auth),
 ):
+    """Get messages. Observers and above can read."""
+    if current_user:
+        _, membership = await check_room_permission(db, room_id, current_user, RoomRole.OBSERVER)
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Must be a room member to view messages")
+
     messages, total = await message_service.get_messages(
         db, room_id, limit=limit, offset=offset, msg_type=type, parent_id=parent_id, agent_id=agent_id,
     )

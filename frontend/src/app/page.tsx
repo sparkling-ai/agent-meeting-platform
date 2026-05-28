@@ -24,6 +24,7 @@ export default function Home() {
   const [name, setName] = useState("");
   const [topic, setTopic] = useState("");
   const [agenda, setAgenda] = useState("");
+  const [visibility, setVisibility] = useState("unlisted");
   const [error, setError] = useState("");
 
   const loadData = async () => {
@@ -44,10 +45,11 @@ export default function Home() {
   const createRoom = async () => {
     if (!name.trim()) return;
     try {
-      await roomsApi.create({ name: name.trim(), topic: topic.trim() || undefined, agenda: agenda.trim() || undefined });
+      await roomsApi.create({ name: name.trim(), topic: topic.trim() || undefined, visibility, agenda: agenda.trim() || undefined });
       setName("");
       setTopic("");
       setAgenda("");
+      setVisibility("unlisted");
       setShowCreate(false);
       loadData();
     } catch (e) {
@@ -105,6 +107,20 @@ export default function Home() {
             value={agenda}
             onChange={(e) => setAgenda(e.target.value)}
           />
+          <div className="flex gap-4 mb-4">
+            <div className="flex-1">
+              <label className="text-xs text-slate-400 mb-1 block">Visibility</label>
+              <select
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:border-blue-500 focus:outline-none"
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value)}
+              >
+                <option value="public">🌐 Public</option>
+                <option value="unlisted">🔗 Unlisted</option>
+                <option value="private">🔒 Private</option>
+              </select>
+            </div>
+          </div>
           <div className="flex gap-2">
             <button onClick={createRoom} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition">
               Create

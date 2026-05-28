@@ -188,12 +188,12 @@ class MeetingClient:
         logger.info("Created room: %s (%s)", name, room.id[:8])
         return room
 
-    async def join_room(self, room_id: str, role: str = "participant") -> Room:
+    async def join_room(self, room_id: str, role: str = "member") -> Room:
         """Join a meeting room.
 
         Args:
             room_id: Room ID to join.
-            role: Role in the meeting (participant, observer).
+            role: Role in the meeting (owner, moderator, member, observer).
 
         Returns:
             Room object.
@@ -203,6 +203,7 @@ class MeetingClient:
         """
         await self._transport.post(f"/api/rooms/{room_id}/join", json_data={
             "agent_id": self.agent_id,
+            "role": role,
         })
 
         # Fetch room details
@@ -217,6 +218,81 @@ class MeetingClient:
         return await self._transport.patch(f"/api/rooms/{room_id}/status", json_data={
             "status": "active",
         })
+
+    # ── RBAC Methods ─────────────────────────────────────────────────
+
+    async def invite_to_room(self, room_id: str, agent_id: str, role: str = "member") -> dict:
+        """Invite an agent to a room with a specific role.
+
+        Args:
+            room_id: Room ID.
+            agent_id: Agent ID to invite.
+            role: Room role (owner, moderator, member, observer).
+
+        Returns:
+            Invitation result.
+        """
+        return await self._transport.post(f"/api/rooms/{room_id}/invite", json_data={
+            "agent_id": agent_id,
+            "role": role,
+        })
+
+    async def kick_member(self, room_id: str, agent_id: str) -> dict:
+        """Kick a member from a room.
+
+        Args:
+            room_id: Room ID.
+            agent_id: Agent ID to kick.
+
+        Returns:
+            Kick result.
+        """
+        return await self._transport.delete(f"/api/rooms/{room_id}/members/{agent_id}")
+
+    async def update_member_role(self, room_id: str, agent_id: str, role: str) -> dict:
+        """Change a member's room role.
+
+        Args:
+            room_id: Room ID.
+            agent_id: Agent ID.
+            role: New role (owner, moderator, member, observer).
+
+        Returns:
+            Role update result.
+        """
+        return await self._transport.patch(f"/api/rooms/{room_id}/members/{agent_id}/role", json_data={
+            "role": role,
+        })
+
+    async def create_room_with_visibility(
+        self,
+        name: str,
+        topic: str,
+        visibility: str = "unlisted",
+        max_participants: int = 20,
+        settings: dict[str, Any] | None = None,
+    ) -> Room:
+        """Create a room with visibility settings.
+
+        Args:
+            name: Room name.
+            topic: Meeting topic.
+            visibility: public, unlisted, or private.
+            max_participants: Maximum room members.
+            settings: Optional room settings.
+
+        Returns:
+            Room object.
+        """
+        return await self.create_room(
+            name=name,
+            topic=topic,
+            settings={
+                **(settings or {}),
+                "visibility": visibility,
+                "max_participants": max_participants,
+            },
+        )
 
     # ── Messages ─────────────────────────────────────────────────────
 

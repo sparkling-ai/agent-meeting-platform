@@ -19,3 +19,8 @@ class AuthError(MeetingError):
 class NotInRoomError(MeetingError):
     """Agent is not in the room."""
     pass
+
+
+class PermissionDeniedError(MeetingError):
+    """Insufficient permissions for the requested action."""
+    pass

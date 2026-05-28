@@ -71,6 +71,14 @@ class Transport:
         resp.raise_for_status()
         return resp.json()
 
+    async def delete(self, path: str, params: dict | None = None) -> dict:
+        """Make a DELETE request."""
+        resp = await self._http.delete(path, params=params, headers=self._headers())
+        resp.raise_for_status()
+        if resp.status_code == 204:
+            return {}
+        return resp.json()
+
     # ── WebSocket ────────────────────────────────────────────────────
 
     async def ws_connect(self, room_id: str) -> None:

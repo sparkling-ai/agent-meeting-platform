@@ -38,6 +38,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 // Types
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -51,6 +61,9 @@ export interface Room {
   name: string;
   topic: string | null;
   status: string;
+  visibility: string;
+  max_participants: number;
+  owner_id: string | null;
   settings: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -111,6 +124,15 @@ export interface ActionItem {
   created_at: string;
 }
 
+// Auth API
+export const authApi = {
+  register: (data: { username: string; email: string; password: string; display_name?: string }) =>
+    request<{ access_token: string; user: User }>("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
+  login: (data: { username: string; password: string }) =>
+    request<{ access_token: string; user: User }>("/api/auth/login", { method: "POST", body: JSON.stringify(data) }),
+  me: () => request<User>("/api/auth/me"),
+};
+
 // Agent API
 export const agentsApi = {
   list: () => request<Agent[]>("/api/agents"),
@@ -125,7 +147,7 @@ export const agentsApi = {
 export const roomsApi = {
   list: () => request<Room[]>("/api/rooms"),
   get: (id: string) => request<RoomDetail>(`/api/rooms/${id}`),
-  create: (data: { name: string; topic?: string; agenda?: string; settings?: Record<string, unknown> }) =>
+  create: (data: { name: string; topic?: string; visibility?: string; max_participants?: number; settings?: Record<string, unknown> }) =>
     request<Room>("/api/rooms", { method: "POST", body: JSON.stringify(data) }),
   join: (roomId: string, data: { agent_id: string; role: string }) =>
     request<{ room_id: string; agent_id: string; role: string }>(`/api/rooms/${roomId}/join`, { method: "POST", body: JSON.stringify(data) }),
@@ -137,6 +159,12 @@ export const roomsApi = {
     request<Room>(`/api/rooms/${roomId}/close`, { method: "POST" }),
   updateStatus: (roomId: string, status: string) =>
     request<Room>(`/api/rooms/${roomId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  invite: (roomId: string, data: { agent_id: string; role: string }) =>
+    request<{ detail: string; agent_id: string; role: string }>(`/api/rooms/${roomId}/invite`, { method: "POST", body: JSON.stringify(data) }),
+  kick: (roomId: string, agentId: string) =>
+    request<{ detail: string; agent_id: string }>(`/api/rooms/${roomId}/members/${agentId}`, { method: "DELETE" }),
+  updateRole: (roomId: string, agentId: string, role: string) =>
+    request<{ detail: string; old_role: string; new_role: string }>(`/api/rooms/${roomId}/members/${agentId}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
 };
 
 // Message API
@@ -154,8 +182,12 @@ export const messagesApi = {
 
 // Moderator API
 export const moderatorApi = {
-  getState: (roomId: string) => request<ModeratorState>(`/api/moderator/${roomId}/state`),
-  start: (roomId: string) => request<ModeratorState>(`/api/moderator/${roomId}/start`, { method: "POST" }),
+  getState: (roomId: string) => request<ModeratorState>(`/api/rooms/${roomId}/moderator/state`),
+  start: (roomId: string) => request<any>(`/api/rooms/${roomId}/moderator/start`, { method: "POST" }),
+  advance: (roomId: string) => request<any>(`/api/rooms/${roomId}/moderator/advance`, { method: "POST" }),
+  vote: (roomId: string, data?: { proposal_id?: string }) =>
+    request<any>(`/api/rooms/${roomId}/moderator/vote`, { method: "POST", body: JSON.stringify(data || {}) }),
+  close: (roomId: string) => request<any>(`/api/rooms/${roomId}/moderator/close`, { method: "POST" }),
 };
 
 // Decisions & Action Items
@@ -165,6 +197,16 @@ export const decisionsApi = {
 
 export const actionItemsApi = {
   list: (roomId: string) => request<ActionItem[]>(`/api/rooms/${roomId}/action-items`),
+};
+
+// Admin API
+export const adminApi = {
+  stats: () => request<any>("/api/admin/stats"),
+  listUsers: () => request<User[]>("/api/admin/users"),
+  updateUser: (userId: string, data: { role?: string; is_active?: boolean }) =>
+    request<User>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  listRooms: () => request<any[]>("/api/admin/rooms"),
+  deleteRoom: (roomId: string) => request<{ detail: string }>(`/api/admin/rooms/${roomId}`, { method: "DELETE" }),
 };
 
 // Health

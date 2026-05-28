@@ -18,7 +18,8 @@ async def register_agent(
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(optional_auth),
 ):
-    agent = await agent_service.register_agent(db, data)
+    owner_id = str(current_user.id) if current_user else None
+    agent = await agent_service.register_agent(db, data, owner_id=owner_id)
     return agent
 
 

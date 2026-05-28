@@ -21,11 +21,13 @@ from app.main import app
 async def db_tables():
     """Create schema + tables before test, drop after. For E2E tests only."""
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS agent_meeting_dev"))
+        await conn.execute(text("DROP SCHEMA IF EXISTS agent_meeting_dev CASCADE"))
+        await conn.execute(text("CREATE SCHEMA agent_meeting_dev"))
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA IF EXISTS agent_meeting_dev CASCADE"))
+    # Dispose engine to force reconnection for next test module
     await engine.dispose()
 
 

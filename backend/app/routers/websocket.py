@@ -14,6 +14,7 @@ from app.models.user import User
 from app.core.events import event_bus, Event
 from app.services.moderator_service import moderator_manager, MeetingPhase
 from app.auth.jwt import verify_token
+from app.auth.permissions import RoomRole, has_min_room_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
@@ -105,16 +106,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
             await websocket.close(code=4001, reason="Invalid token")
             return
 
-        # Verify room membership
+        # Verify room membership and role
         result = await db.execute(
             select(RoomMember).where(
                 RoomMember.room_id == room_id,
                 RoomMember.agent_id == agent.id,
             )
         )
-        if not result.scalar_one_or_none():
+        member = result.scalar_one_or_none()
+        if not member:
             await websocket.close(code=4003, reason="Not a room member")
             return
+
+        # Check minimum role: observers can only view, not send
+        # We allow all roles to connect, but check role on message send
+        agent_room_role = member.role
 
         # Get recent messages
         msgs = await db.execute(
@@ -172,6 +178,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
 
             if not content:
                 await websocket.send_text(json.dumps({"event": "error", "data": {"message": "Empty content"}}))
+                continue
+
+            # Check if agent has permission to send (not observer)
+            if not has_min_room_role(agent_room_role, RoomRole.MEMBER):
+                await websocket.send_text(json.dumps({"event": "error", "data": {"message": "Observers cannot send messages"}}))
                 continue
 
             # Persist message
