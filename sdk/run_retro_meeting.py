@@ -21,34 +21,88 @@ AGENT_PERSONAS = [
     {
         "name": "Alex-PM",
         "role": "Product Manager",
-        "style": "Focuses on user value and shipping. Asks: did we deliver what we promised? What's the impact?"
+        "style": (
+            "Focuses on user value, shipping velocity, and stakeholder impact. "
+            "MANDATORY FOCUS: Prioritization tradeoffs — what features move the needle most for real users? "
+"Return on investment — are we building the right thing? Competitive landscape — what do users have today?"
+        ),
+        "contrarian": "Optimistic about shipping fast. Will push back on perfectionism. Believes 'done is better than perfect.'",
     },
     {
         "name": "Jordan-Arch",
         "role": "Lead Architect",
-        "style": "Cautious, thorough. Looks at code quality, tech debt, system health. Asks: is this sustainable?"
+        "style": (
+            "Cautious, thorough. Obsessed with system health, tech debt, and long-term sustainability. "
+            "MANDATORY FOCUS: Architectural integrity — are we building on solid foundations? "
+"Scalability limits — what breaks at 10x load? Dependency risks — what third-party tools could fail us?"
+        ),
+        "contrarian": "Plays devil's advocate by default. Will challenge 'good enough' and ask 'what if this grows?' Slow and steady wins.",
     },
     {
         "name": "Sam-Dev",
         "role": "Senior Developer",
-        "style": "Practical, honest. Cares about code quality and developer experience. Asks: does this actually work well?"
+        "style": (
+            "Practical, honest, hands-on. Cares about developer experience, code maintainability, and debugging reality. "
+            "MANDATORY FOCUS: Developer friction — how painful is it to use and extend? "
+"Edge cases — what happens with weird inputs? Debugging experience — can you trace a bug in 5 minutes?"
+        ),
+        "contrarian": "Skeptical of abstractions and over-engineering. Values simplicity. Will call out 'cool but useless' features.",
     },
     {
         "name": "Riley-DevOps",
         "role": "DevOps / QA Lead",
-        "style": "Thinks about reliability, testing, CI/CD. Asks: can we ship this confidently? What breaks?"
+        "style": (
+            "Thinks about reliability, testing, CI/CD, and operational reality. "
+            "MANDATORY FOCUS: Failure modes — what happens when things break at 3am? "
+"Test coverage gaps — what scenarios are untested? Deployment risk — can we roll back safely? Monitoring blind spots."
+        ),
+        "contrarian": "Risk-averse. Will veto anything that can't be monitored, rolled back, or tested. 'If it's not tested, it's broken.'",
     },
     {
         "name": "Maya-Marketing",
         "role": "Growth & Marketing Lead",
-        "style": "Thinks about positioning, adoption, storytelling. Asks: can we tell a compelling story about this?"
+        "style": (
+            "Thinks about positioning, adoption, storytelling, and market fit. "
+            "MANDATORY FOCUS: User acquisition — how do real people discover this? "
+"Competitive differentiation — why choose us over alternatives? Narrative clarity — can you explain this in 10 seconds?"
+        ),
+        "contrarian": "Will challenge every feature that doesn't directly help acquire or retain users. 'If we can't market it, should we build it?'",
     },
     {
         "name": "Casey-UX",
         "role": "UX / Product Designer",
-        "style": "Obsessed with human usability. Asks: would a non-technical person understand this? Where's the friction?"
+        "style": (
+            "Obsessed with human usability, accessibility, and emotional design. "
+            "MANDATORY FOCUS: First-time user experience — can someone figure this out in 60 seconds? "
+"Accessibility — can everyone use this? Error states — what happens when users make mistakes? Cognitive load."
+        ),
+        "contrarian": "Will push back on any feature that adds complexity for users. Values clarity over capability. 'If it needs a manual, it's broken.'",
     },
 ]
+
+def extract_vote_choice(text: str) -> str:
+    """Extract yes/no vote from LLM output that may contain long reasoning."""
+    lower = text.lower()
+    # 1. Look for explicit vote patterns in the full text
+    import re
+    patterns = [
+        r'\bvote\s*(?:is|:)?\s*\*\*?yes\*\*?',
+        r'\bmy vote\s*(?:is|:)?\s*\*\*?yes\*\*?',
+        r'\bi vote\s*(?:for|with)?\s*\*\*?yes\*\*?',
+        r'\bvote:\s*yes\b',
+        r'\byes\b',
+    ]
+    for pattern in patterns:
+        if re.search(pattern, lower):
+            return "yes"
+    # 2. Check the last sentence/paragraph — LLMs often put the decision at the end
+    last_section = lower.rsplit('\n', 1)[-1] if '\n' in lower else lower
+    last_sentence = last_section.rsplit('.', 1)[-1] if '.' in last_section else last_section
+    if 'yes' in last_sentence:
+        return "yes"
+    # 3. Default to "no" only if no yes indicator found anywhere
+    return "no"
+
 
 MEETING_TOPIC = (
     "Sprint Retrospective — 'Human-Centric Foundation' Sprint. "
@@ -128,11 +182,17 @@ async def create_agent(persona: dict) -> tuple[MeetingClient, list[str]]:
     async def on_turn(event):
         if event.data.get("agent_id") != client.agent_id:
             return
+        anti_echo = (
+            "CRITICAL RULE: DO NOT repeat what others have said. "
+            "Read the last 3 messages. If your point was already made, take a DIFFERENT position or add a SPECIFIC NEW angle. "
+            "Respond with JSON: {\"type\": \"chat|question|proposal|objection|risk|summary\", \"content\": \"your 2-4 sentence response\"}"
+        )
         system = (
             f"You are {persona['name']}, the {persona['role']}. "
             f"Style: {persona['style']}. "
+            f"Personality: {persona['contrarian']} "
             f"You are in a sprint retrospective meeting. Be honest, specific, and constructive. "
-            f"Respond with JSON: {{\"type\": \"chat|question|proposal|objection|risk|summary\", \"content\": \"your 2-4 sentence response\"}}"
+            f"{anti_echo}"
         )
         recent = "\n".join(context[-12:])
         user_msg = f"Discussion so far:\n{recent}\n\nYour response as {persona['name']} (JSON only):"
@@ -153,7 +213,7 @@ async def create_agent(persona: dict) -> tuple[MeetingClient, list[str]]:
             f"Proposal: {proposal}\nVote yes or no with honest reasoning.",
             max_tokens=200,
         )
-        choice = "yes" if "yes" in analysis.lower()[:50] else "no"
+        choice = extract_vote_choice(analysis)
         await client.vote(event.data.get("proposal_id", ""), choice, reasoning=analysis[:400])
         print(f"    🗳️ {persona['name']}: {choice}")
 
@@ -211,14 +271,18 @@ async def main():
         print(f"  {'─'*50}")
 
         for i, (client, persona) in enumerate(zip(agents, AGENT_PERSONAS)):
+            anti_echo = (
+                "CRITICAL RULE: DO NOT repeat what others have said. "
+                "Read the last 3 messages. If your point was already made, AGREE or DISAGREE with a specific NEW angle — don't rephrase. "
+                "You MUST bring a unique perspective based on your role. "
+                "Respond with JSON: {\"type\": \"chat|question|proposal|objection|risk|summary\", \"content\": \"your 2-4 sentence response\"}"
+            )
             system = (
                 f"You are {persona['name']}, the {persona['role']}. "
                 f"Style: {persona['style']}. "
+                f"Personality: {persona['contrarian']} "
                 f"{round_prompt} "
-            )
-            system += (
-                "Respond with JSON: {\"type\": \"chat|question|proposal|objection|risk|summary\", "
-                "\"content\": \"your 2-4 sentence response\"}"
+                f"{anti_echo}"
             )
 
             messages, _ = await client.get_messages(room_id, limit=12)
@@ -283,7 +347,7 @@ async def main():
                 vote_prompt,
                 max_tokens=200,
             )
-            choice = "yes" if "yes" in analysis.lower()[:50] else "no"
+            choice = extract_vote_choice(analysis)
             await client.vote(proposal.id, choice, reasoning=analysis[:400], room_id=room_id)
         print(f"  🗳️ {persona['name']}: voted")
 

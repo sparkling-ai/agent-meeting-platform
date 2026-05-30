@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import settings
+from app.core.exception_handlers import register_exception_handlers
 from app.database import engine
 
 logging.basicConfig(level=logging.INFO)
@@ -61,6 +62,9 @@ app.include_router(action_items.router)
 app.include_router(moderator.router)
 app.include_router(auth.router)
 app.include_router(summaries.router)
+
+# Register global exception handlers (after routers so they wrap everything)
+register_exception_handlers(app)
 
 
 @app.get("/health")

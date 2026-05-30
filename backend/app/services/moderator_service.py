@@ -363,14 +363,10 @@ class ModeratorEngine:
             parent_id = str(message.parent_id) if message.parent_id else None
             if parent_id and parent_id in self.state.active_proposals:
                 proposal = self.state.active_proposals[parent_id]
-                # Parse vote choice: handle both "yes" and JSON {"vote": "yes", ...}
-                vote_choice = content.lower().strip()
-                try:
-                    parsed = json.loads(vote_choice)
-                    if isinstance(parsed, dict):
-                        vote_choice = str(parsed.get("vote", vote_choice)).lower().strip()
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                # Parse vote choice using improved parser
+                vote_choice = self._parse_vote_choice(content)
+                logger.info("Room %s: parsed vote '%s' from content: %s",
+                            self.state.room_id, vote_choice, content[:100])
                 proposal.votes.append({
                     "agent_id": agent_id,
                     "choice": vote_choice,
@@ -553,6 +549,104 @@ class ModeratorEngine:
                     ),
                     "metadata": {"trigger": "loop_escalation", "level": 1},
                 }
+
+        # Semantic echo detection: when many agents echo the same sentiment
+        echo_action = self._check_semantic_echo()
+        if echo_action:
+            return echo_action
+
+        return None
+
+    # ── Semantic echo detection ────────────────────────────────────────
+    def _check_semantic_echo(self) -> dict | None:
+        """Detect when multiple agents are echoing the same sentiment/topic."""
+        history = self.state.message_history
+        if len(history) < 8:
+            return None
+
+        recent = history[-10:]
+        if len(recent) < 6:
+            return None
+
+        # Compute word overlap between consecutive messages
+        stop_words = {"the", "a", "an", "is", "are", "was", "were", "be", "been",
+                      "being", "have", "has", "had", "do", "does", "did", "will", "would",
+                      "could", "should", "may", "might", "can", "to", "of", "in", "for",
+                      "on", "with", "at", "by", "from", "as", "and", "but", "or", "not",
+                      "so", "if", "we", "our", "us", "i", "me", "my", "you", "your",
+                      "it", "its", "that", "this", "these", "those", "they", "them", "their",
+                      "what", "which", "who", "how", "when", "where", "why", "all", "each",
+                      "every", "both", "few", "more", "most", "other", "some", "such", "no",
+                      "only", "own", "same", "than", "too", "very", "just", "also", "then",
+                      "there", "here", "about", "up", "out", "into", "over", "after", "before",
+                      "need", "think", "like", "get", "got", "really", "thing", "things",
+                      "going", "make", "made", "one", "two", "new", "well", "know",
+                      "want", "way", "much", "any", "been", "good", "some", "time"}
+
+        def get_words(text: str) -> set:
+            if not isinstance(text, str):
+                return set()
+            return {w for w in text.lower().split() if w not in stop_words and len(w) > 2}
+
+        # Filter to messages with enough content for meaningful comparison
+        recent_with_content = []
+        for m in recent:
+            words = get_words(m["content"])
+            if len(words) >= 3:  # Skip very short messages
+                recent_with_content.append((m, words))
+
+        if len(recent_with_content) < 6:
+            return None
+
+        # Count overlapping message pairs
+        overlap_count = 0
+        for i in range(1, len(recent_with_content)):
+            words_a = recent_with_content[i - 1][1]
+            words_b = recent_with_content[i][1]
+            overlap = len(words_a & words_b) / min(len(words_a), len(words_b))
+            if overlap > 0.4:
+                overlap_count += 1
+
+        # If 6+ out of recent messages share >40% word overlap, trigger intervention
+        if overlap_count >= 6:
+            key = "semantic_echo"
+            self.state.loop_escalation[key] = self.state.loop_escalation.get(key, 0) + 1
+            level = self.state.loop_escalation[key]
+
+            if level >= 3:
+                self.state.loop_escalation[key] = 0
+                return {
+                    "action": "force_convergence",
+                    "type": "chat",
+                    "content": (
+                        "🔴 **We're all saying the same thing.** "
+                        "I'm forcing a proposal — let's vote on this and move forward. "
+                        "Does anyone have a **concrete proposal**?"
+                    ),
+                    "metadata": {"trigger": "semantic_echo", "level": 3},
+                }
+            elif level >= 2:
+                return {
+                    "action": "intervene",
+                    "type": "chat",
+                    "content": (
+                        "🟡 **We've thoroughly discussed this point from every angle.** "
+                        "Unless someone has a genuinely NEW perspective, "
+                        "let's move to action — propose something concrete."
+                    ),
+                    "metadata": {"trigger": "semantic_echo", "level": 2},
+                }
+            else:
+                return {
+                    "action": "intervene",
+                    "type": "chat",
+                    "content": (
+                        "🟢 Multiple team members share the same concern. "
+                        "Let's move from identifying problems to proposing solutions — "
+                        "who has a concrete idea?"
+                    ),
+                    "metadata": {"trigger": "semantic_echo", "level": 1},
+                }
         return None
 
     # ── Topic drift detection ─────────────────────────────────────────
@@ -714,12 +808,64 @@ class ModeratorEngine:
             },
         }
 
+    @staticmethod
+    def _parse_vote_choice(content: str) -> str:
+        """Parse vote choice from content that may be JSON, plain text, or long reasoning."""
+        raw = content.strip()
+
+        # 1. Try JSON parse
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                vote = parsed.get("vote", parsed.get("choice", ""))
+                if isinstance(vote, str):
+                    return vote.lower().strip()
+            elif isinstance(parsed, str):
+                return parsed.lower().strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # 2. Search for yes/no keywords in the full text
+        import re as _re
+        lower = raw.lower()
+        yes_patterns = [r'\bvote\s*(?:is|:)?\s*yes\b', r'\bmy vote\s*(?:is|:)?\s*yes\b',
+                        r'\bi\s+vote\s+yes\b', r'\byes\b']
+        no_patterns = [r'\bvote\s*(?:is|:)?\s*no\b', r'\bmy vote\s*(?:is|:)?\s*no\b',
+                       r'\bi\s+vote\s+no\b', r'\bno\b']
+
+        # Check for yes first (in case both appear, prefer the more explicit one)
+        for pat in yes_patterns:
+            if _re.search(pat, lower):
+                return "yes"
+        for pat in no_patterns:
+            if _re.search(pat, lower):
+                return "no"
+
+        # 3. Fallback: check if content is just yes/no variants
+        if lower in ("yes", "agree", "accept", "👍", "1", "true"):
+            return "yes"
+        if lower in ("no", "disagree", "reject", "👎", "0", "false"):
+            return "no"
+
+        logger.warning("Could not parse vote from content: %s", content[:200])
+        return "unknown"
+
     # ── Vote tallying ────────────────────────────────────────────────
     async def _tally_votes(self, proposal: TrackedProposal, db: AsyncSession) -> list[dict]:
         """Tally votes on a proposal and create decision if threshold met."""
         actions = []
-        yes_count = sum(1 for v in proposal.votes if v["choice"] in ("yes", "agree", "accept", "👍"))
-        no_count = sum(1 for v in proposal.votes if v["choice"] in ("no", "disagree", "reject", "👎"))
+
+        # Re-parse all votes using improved parser
+        yes_count = 0
+        no_count = 0
+        for v in proposal.votes:
+            choice = self._parse_vote_choice(v["choice"])
+            v["choice"] = choice  # Update with parsed value
+            if choice in ("yes", "agree", "accept", "👍"):
+                yes_count += 1
+            elif choice in ("no", "disagree", "reject", "👎"):
+                no_count += 1
+
         total = len(proposal.votes)
 
         if total == 0:
@@ -960,13 +1106,10 @@ class ModeratorEngine:
 
             yes_count = 0
             for v in vote_msgs:
-                try:
-                    parsed = json.loads(v.content.lower().strip())
-                    if isinstance(parsed, dict) and parsed.get("vote") in ("yes", "agree", "accept"):
-                        yes_count += 1
-                except (json.JSONDecodeError, TypeError):
-                    if v.content.lower().strip() in ("yes", "agree", "accept"):
-                        yes_count += 1
+                choice = self._parse_vote_choice(v.content)
+                logger.info("close_meeting: parsed vote '%s' from: %s", choice, v.content[:100])
+                if choice in ("yes", "agree", "accept"):
+                    yes_count += 1
 
             if yes_count >= 2:  # Simple majority
                 decision = Decision(
@@ -985,10 +1128,30 @@ class ModeratorEngine:
         await db.flush()
 
         # Generate minutes
+        # Build full message history (not just last 50)
         all_msgs = "\n".join(
             f"{m.get('agent_name', m['agent_id'][:8])}: {m['content']}"
-            for m in self.state.message_history[-50:]  # Last 50 messages for context
+            for m in self.state.message_history  # Full history
         )
+
+        # Build participant list
+        participant_names = set()
+        for m in self.state.message_history:
+            name = m.get('agent_name', '')
+            if name:
+                participant_names.add(name)
+        participants_text = ", ".join(sorted(participant_names))
+
+        # Build proposals with vote tallies
+        proposals_text_parts = []
+        for pid, prop in self.state.active_proposals.items():
+            yes_votes = sum(1 for v in prop.votes if v["choice"] in ("yes", "agree", "accept"))
+            no_votes = sum(1 for v in prop.votes if v["choice"] in ("no", "disagree", "reject"))
+            proposals_text_parts.append(
+                f"Proposal by {prop.proposer_id[:8]}: {prop.content[:200]}\n"
+                f"  Status: {prop.status}, Votes: {yes_votes} yes / {no_votes} no"
+            )
+        proposals_text = "\n\n".join(proposals_text_parts)
 
         decisions_text = "\n".join(
             f"- {d.title} ({d.status})" for d in (await db.execute(
@@ -1002,7 +1165,9 @@ class ModeratorEngine:
             minutes = await moderator_minutes(
                 self.state.room_id,
                 decisions=decisions_text,
-                actions=all_msgs[-3000:],
+                actions=all_msgs[-6000:],  # More context
+                participants=participants_text,
+                proposals_text=proposals_text,
             )
         except Exception:
             minutes = f"Meeting concluded. {len(self.state.message_history)} messages exchanged. {len(self.state.decision_ids)} decisions made."

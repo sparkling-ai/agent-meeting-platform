@@ -42,6 +42,25 @@ export default function Home() {
 
   useEffect(() => { loadData(); }, []);
 
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  const createDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const { roomsApi: rApi } = await import("@/lib/api");
+      const room = await rApi.create({
+        name: "Demo Meeting",
+        topic: "Live demo — watch AI agents discuss, decide, and vote",
+        visibility: "public",
+        settings: { agenda: "1. Introductions\n2. Topic discussion\n3. Proposal\n4. Vote", demo: true },
+      });
+      window.location.href = `/rooms/${room.id}`;
+    } catch (e) {
+      setError("Failed to start demo — is the backend running?");
+      setDemoLoading(false);
+    }
+  };
+
   const createRoom = async () => {
     if (!name.trim()) return;
     try {

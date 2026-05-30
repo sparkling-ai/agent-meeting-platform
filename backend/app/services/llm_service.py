@@ -134,22 +134,32 @@ Discussion context:
     return items[:10]
 
 
-async def moderator_minutes(room_id: str, decisions: str, actions: str) -> str:
+async def moderator_minutes(room_id: str, decisions: str, actions: str, participants: str = "", proposals_text: str = "") -> str:
     """Generate final meeting minutes."""
-    prompt = f"""Generate professional meeting minutes.
+    prompt = f"""Generate DETAILED meeting minutes from the ACTUAL discussion below.
+You MUST extract specific details — names, decisions, vote counts, concrete discussion points.
+Do NOT use placeholder text. Every statement must reference something from the actual discussion.
+
+Participants:
+{participants or 'See discussion below'}
 
 Decisions made:
 {decisions}
 
-Discussion summary:
-{actions[-2000:]}
+Proposals and votes:
+{proposals_text or 'See discussion below'}
 
-Write clear, structured meeting minutes with:
-1. Executive Summary (2-3 sentences)
-2. Key Decisions
-3. Action Items
-4. Open Questions / Parking Lot"""
-    return await _call_llm(prompt, system="You are a professional meeting secretary.", max_tokens=600)
+Full discussion:
+{actions[-4000:]}
+
+Write structured meeting minutes with:
+1. **Executive Summary** (2-3 sentences summarizing what was discussed and decided — be specific)
+2. **Participants** (list who participated, with their roles)
+3. **Key Discussion Points** (3-5 bullet points citing SPECIFIC things said by SPECIFIC participants)
+4. **Decisions Made** (each decision with vote tally if available)
+5. **Action Items** (concrete, assigned tasks if any were agreed on)
+6. **Open Questions / Parking Lot** (unresolved items carried forward)"""
+    return await _call_llm(prompt, system="You are a professional meeting secretary. You MUST reference actual details from the discussion, never use generic placeholders.", max_tokens=800)
 
 
 async def moderator_steel_man(arguments: list[str]) -> str:
