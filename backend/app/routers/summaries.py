@@ -318,8 +318,8 @@ async def join_as_observer(
     """
     room = await _get_room_or_404(db, room_id)
 
-    if room.status not in ("active", "draft"):
-        raise HTTPException(status_code=400, detail="Room is not active")
+    if room.status not in ("active", "draft", "closed", "archived"):
+        raise HTTPException(status_code=400, detail="Room is not available for observation")
 
     # Check if user already has an observer agent in this room
     if current_user:
