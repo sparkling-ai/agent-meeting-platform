@@ -124,6 +124,21 @@ export interface ActionItem {
   created_at: string;
 }
 
+export interface ModerationTask {
+  id: string;
+  task_type: string;
+  topic: string;
+  description: string | null;
+  status: string;
+  expected_output: string;
+  created_at: string;
+}
+
+export interface ModerationTaskListResponse {
+  tasks: ModerationTask[];
+  total: number;
+}
+
 // Auth API
 export const authApi = {
   register: (data: { username: string; email: string; password: string; display_name?: string }) =>
@@ -212,4 +227,18 @@ export const adminApi = {
 // Health
 export const healthApi = {
   check: () => request<{ status: string }>("/health"),
+};
+
+// Moderation API
+export const moderationApi = {
+  list: (params?: { task_type?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.task_type) qs.set("task_type", params.task_type);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    return request<ModerationTaskListResponse>(`/api/moderation/predefined_task?${qs}`);
+  },
+  get: (id: string) => request<ModerationTask>(`/api/moderation/predefined_task/${id}`),
+  create: (data: { task_type: string; topic: string; description?: string }) =>
+    request<ModerationTask>("/api/moderation/predefined_task", { method: "POST", body: JSON.stringify(data) }),
 };
