@@ -3,11 +3,32 @@ name = "agent-meeting"
 version = "0.1.0"
 description = "Python SDK for the Agent Meeting Platform — join meetings, chat, vote, investigate"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+authors = [
+    { name = "Agent Meeting Platform Contributors" },
+]
+keywords = ["meeting", "agent", "sdk", "websocket", "collaboration"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: AsyncIO",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "httpx>=0.28.1",
     "websockets>=14.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/dandan-user/agent-meeting-platform"
+Repository = "https://github.com/dandan-user/agent-meeting-platform"
+Documentation = "https://github.com/dandan-user/agent-meeting-platform/tree/main/sdk"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

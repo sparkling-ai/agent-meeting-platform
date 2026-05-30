@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -12,6 +10,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-openrouter/google/gemini-2.5-flash}
+      LLM_API_KEY: ${LLM_API_KEY:-}
       DEBUG: "true"
     depends_on:
       postgres:
@@ -19,10 +19,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
 
   frontend:
     build:
@@ -32,7 +33,25 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  demo-agents:
+    build:
+      context: ./sdk
+      dockerfile: Dockerfile.demo
+    environment:
+      MEETING_SERVER: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
 
   postgres:
     image: pgvector/pgvector:pg17

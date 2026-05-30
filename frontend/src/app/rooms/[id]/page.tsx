@@ -93,7 +93,7 @@ export default function RoomView() {
   useEffect(() => { loadRoom(); }, [roomId]);
   useEffect(() => { loadExtras(); }, [roomId]);
 
-  // Poll messages every 2s
+  // Poll messages every 2s (fallback when WS not connected)
   useEffect(() => {
     if (connected) return; // WS handles it
     const interval = setInterval(async () => {
@@ -105,20 +105,55 @@ export default function RoomView() {
     return () => clearInterval(interval);
   }, [roomId, connected]);
 
+  // Poll moderator state & extras (fallback when WS not connected)
+  useEffect(() => {
+    if (connected) return;
+    const interval = setInterval(loadExtras, 3000);
+    return () => clearInterval(interval);
+  }, [roomId, connected, loadExtras]);
+
   // Handle WS events
   useEffect(() => {
     if (!lastEvent) return;
-    if (lastEvent.event === "new_message" && lastEvent.data) {
-      const msg = lastEvent.data as unknown as Message;
+    const { event, data } = lastEvent;
+
+    // New message (live or recent from reconnect)
+    if (event === "new_message" || event === "recent_message") {
+      const msg = data as unknown as Message;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
     }
-    if (lastEvent.event === "agent_joined" || lastEvent.event === "agent_left") {
-      roomsApi.get(roomId).then(setRoom);
+
+    // Agent joined / left → refresh room members
+    if (event === "agent_joined" || event === "agent_left") {
+      roomsApi.get(roomId).then(setRoom).catch(() => {});
     }
-  }, [lastEvent, roomId]);
+
+    // Room status changed → refresh room
+    if (event === "room_status_changed") {
+      roomsApi.get(roomId).then(setRoom).catch(() => {});
+    }
+
+    // Decision made → refresh decisions list
+    if (event === "decision_made" || event === "decision_created") {
+      decisionsApi.list(roomId).then(setDecisions).catch(() => {});
+    }
+
+    // Moderator action → refresh moderator state
+    if (event === "moderator_action") {
+      moderatorApi.getState(roomId).then(setModeratorState).catch(() => {});
+      // Also refresh decisions & action items since moderator can create them
+      loadExtras();
+    }
+
+    // Errors from WS
+    if (event === "error") {
+      const msg = (data as Record<string, unknown>)?.message;
+      if (msg && typeof msg === "string") setError(msg);
+    }
+  }, [lastEvent, roomId, loadExtras]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

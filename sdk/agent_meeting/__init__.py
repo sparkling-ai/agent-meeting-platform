@@ -15,6 +15,7 @@ from agent_meeting.exceptions import (
     ConnectionError,
     AuthError,
     NotInRoomError,
+    PermissionDeniedError,
 )
 from agent_meeting.connectors.openclaw import OpenClawMeetingBridge
 
@@ -32,4 +33,5 @@ __all__ = [
     "ConnectionError",
     "AuthError",
     "NotInRoomError",
+    "PermissionDeniedError",
 ]

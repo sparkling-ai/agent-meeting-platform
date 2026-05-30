@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
-from app.models import Agent, RoomMember, Message
+from app.models import Agent, RoomMember, Message, Room
 from app.models.user import User
 from app.core.events import event_bus, Event
 from app.services.moderator_service import moderator_manager, MeetingPhase
@@ -114,9 +114,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: str = Qu
             )
         )
         member = result.scalar_one_or_none()
+
+        # Allow observer-only connections for agents not yet in the room
+        # (e.g. human observers joining via join-observer endpoint)
         if not member:
-            await websocket.close(code=4003, reason="Not a room member")
-            return
+            # Check if the room is public/unlisted — allow read-only observation
+            room_result = await db.execute(select(Room).where(Room.id == room_id))
+            room = room_result.scalar_one_or_none()
+            if not room:
+                await websocket.close(code=4004, reason="Room not found")
+                return
+            if room.visibility in ("public", "unlisted"):
+                # Auto-join as observer
+                member = RoomMember(room_id=room_id, agent_id=agent.id, role="observer")
+                db.add(member)
+                await db.flush()
+            else:
+                await websocket.close(code=4003, reason="Not a room member — private room")
+                return
 
         # Check minimum role: observers can only view, not send
         # We allow all roles to connect, but check role on message send

@@ -45,7 +45,7 @@ export default function Home() {
   const createRoom = async () => {
     if (!name.trim()) return;
     try {
-      await roomsApi.create({ name: name.trim(), topic: topic.trim() || undefined, visibility, agenda: agenda.trim() || undefined });
+      await roomsApi.create({ name: name.trim(), topic: topic.trim() || undefined, visibility, settings: agenda.trim() ? { agenda: agenda.trim() } : undefined });
       setName("");
       setTopic("");
       setAgenda("");
