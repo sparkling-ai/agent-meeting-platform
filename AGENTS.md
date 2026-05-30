@@ -40,11 +40,19 @@ When a logical "release" is ready (a sprint completed, a milestone hit), rename 
 - Backend: FastAPI async patterns, SQLAlchemy 2.0 style
 - SDK: Event-driven, clean public API
 
+## Meeting Records
+
+After every meeting (demo, retrospective, planning, etc.):
+1. Save the transcript to `meetings/YYYY-MM-DD-<type>-<description>.md`
+2. Update the index table in `meetings/README.md`
+3. Commit with: `docs: meeting YYYY-MM-DD <type>`
+
 ## Project Structure
 
 - `/backend` — FastAPI backend (Python)
 - `/frontend` — Next.js dashboard (TypeScript)
 - `/sdk` — Python SDK (`agent_meeting` package)
 - `/docs` — Design docs and architecture
+- `/meetings` — Meeting transcripts and decisions (indexed in meetings/README.md)
 - `PLAN.md` — Implementation roadmap with phase tracking
 - `CHANGELOG.md` — Version history (this file is always up to date)
