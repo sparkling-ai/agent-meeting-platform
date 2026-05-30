@@ -107,6 +107,17 @@ Every meeting MUST include an **Escalation Board** at the end:
 
 **Every team member has escalation rights.** No hierarchy — if Sam spots a blocker, Sam escalates.
 
+## Team Composition Rules
+
+The core team is 6 members. During meetings, the team can:
+
+- **Add up to 2 new members** without approval (e.g., a Security specialist for a security review, a Data Scientist for analytics features)
+- **More than 2 new members** → 🚨 ESCALATION NEEDED — requires Dandan's approval
+- **Extend an existing member's role/scope** freely — e.g., Sam covers Dev tooling in addition to development
+- **BUT** avoid conflicts of interest — no member should wear two hats that create perspective conflicts (e.g., the same person shouldn't be both QA lead and feature implementer for the same sprint)
+
+New members should get a profile in `team/` before their first meeting.
+
 ## Research Policy
 
 All team members SHOULD use web search to:
