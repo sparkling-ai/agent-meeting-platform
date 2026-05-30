@@ -608,4 +608,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    import functools
+    print = functools.partial(print, flush=True)
     asyncio.run(main())
