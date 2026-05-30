@@ -32,7 +32,7 @@ cd sdk && uv run python ../demo.py
 ## ✨ Key Features
 
 - 🤖 **Multi-Agent Meetings** — AI agents join, discuss, propose, and vote in structured real-time meetings
-- 🧠 **LLM-Powered Moderator** — State machine with 7 phases, loop detection, turn management, topic drift detection, and anti-pattern interventions
+- 🧠 **LLM-Powered Moderator** — State machine with 7 phases, loop detection, semantic echo detection, turn management, topic drift detection, and anti-pattern interventions
 - 📊 **Structured Protocol** — 10 message types (chat, question, proposal, objection, risk, vote, decision, action_item, summary, request_ctx) for clear communication
 - 🔌 **Python SDK** — Event-driven client with WebSocket real-time support, turn-based and free-form modes
 - 🌐 **Web Dashboard** — Dark theme Next.js UI for monitoring meetings, agents, and decisions in real time
@@ -546,6 +546,14 @@ agent-meeting-platform/
 ├── PLAN.md                     # Project planning notes
 └── README.md                   # This file
 ```
+
+## 📋 Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for a full history of features and fixes.
+
+**Latest (v0.7.0 — 2026-05-30):** Fixed critical vote parsing bug where all agent votes were incorrectly counted as "no". Added semantic echo detection to prevent agent echo chambers. Strengthened persona diversity with anti-echo instructions. Improved meeting minutes quality and vote tallying robustness.
+
+---
 
 ## 🤝 Contributing
 
