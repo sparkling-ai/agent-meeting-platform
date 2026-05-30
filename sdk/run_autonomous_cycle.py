@@ -378,7 +378,7 @@ async def run_development_sprint(tasks: list[dict], cycle: int) -> list[str]:
         try:
             proc = await asyncio.create_subprocess_exec(
                 "claude", "--print", "--permission-mode", "bypassPermissions",
-                "--prompt", code_prompt,
+                code_prompt,
                 cwd=project_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
