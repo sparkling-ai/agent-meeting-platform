@@ -526,3 +526,78 @@ class TestParkTopic:
         assert result["action"] == "topic_parked"
         assert len(engine.state.parking_lot) == 1
         assert engine.state.parking_lot[0].topic == "Future architecture discussion"
+
+
+# ── 13. Predefined Task Execution ─────────────────────────────────────────────
+class TestExecuteTask:
+    """Unit tests for the static execute_task method on ModeratorEngine."""
+
+    def test_consensus_vote_all_yes(self):
+        messages = [
+            {"content": "I vote yes", "type": "vote"},
+            {"content": "yes", "type": "vote"},
+            {"content": "my vote is yes", "type": "vote"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Adopt framework X", messages)
+        assert result["topic"] == "Adopt framework X"
+        assert result["votes_for"] == 3
+        assert result["votes_against"] == 0
+        assert result["total_votes"] == 3
+        assert result["consensus_reached"] is True
+        assert result["decision"] == "accepted"
+
+    def test_consensus_vote_all_no(self):
+        messages = [
+            {"content": "I vote no", "type": "vote"},
+            {"content": "no", "type": "vote"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Cancel project", messages)
+        assert result["votes_for"] == 0
+        assert result["votes_against"] == 2
+        assert result["consensus_reached"] is False
+        assert result["decision"] == "no_consensus"
+
+    def test_consensus_vote_mixed_majority_yes(self):
+        messages = [
+            {"content": "yes", "type": "vote"},
+            {"content": "yes", "type": "vote"},
+            {"content": "no", "type": "vote"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Deploy v2", messages)
+        assert result["votes_for"] == 2
+        assert result["votes_against"] == 1
+        assert result["total_votes"] == 3
+        assert result["consensus_reached"] is True
+
+    def test_consensus_vote_no_votes(self):
+        messages = [
+            {"content": "I think we should discuss more", "type": "chat"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Any topic", messages)
+        assert result["total_votes"] == 0
+        assert result["consensus_reached"] is False
+        assert result["decision"] == "no_consensus"
+
+    def test_consensus_vote_ignores_non_vote_messages(self):
+        messages = [
+            {"content": "Interesting point", "type": "chat"},
+            {"content": "yes", "type": "vote"},
+            {"content": "Let me investigate", "type": "chat"},
+            {"content": "I vote yes", "type": "vote"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Merge PR", messages)
+        assert result["votes_for"] == 2
+        assert result["total_votes"] == 2
+
+    def test_consensus_vote_unknown_votes_tracked(self):
+        messages = [
+            {"content": "maybe later", "type": "vote"},
+            {"content": "yes", "type": "vote"},
+        ]
+        result = ModeratorEngine.execute_task("consensus_vote", "Schedule", messages)
+        assert result["votes_unknown"] == 1
+        assert result["votes_for"] == 1
+
+    def test_unsupported_task_type_raises(self):
+        with pytest.raises(ValueError, match="Unsupported task type"):
+            ModeratorEngine.execute_task("topic_review", "X", [])

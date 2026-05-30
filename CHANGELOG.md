@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Predefined moderation task API — `POST /api/moderation/predefined_task` creates a moderation task from a predefined template (topic_review, consensus_vote, risk_assessment) with minimal input and auto-generated expected output. Includes GET for listing and fetching individual tasks.
 - Moderation task unit tests — 9 tests covering creation of all task types, validation errors, and get-by-id
 - Frontend moderation page — `/moderation` route with task listing, type filtering, create form, and expandable task detail showing status feedback and expected output
+- Moderator Engine task execution — `execute_task()` static method on ModeratorEngine that executes predefined tasks deterministically. Implements `consensus_vote` task type: tallies vote messages from a room, parses choices using existing vote parser, and returns structured result (votes_for, votes_against, total, consensus_reached, decision).
+- Task execution API endpoint — `POST /api/moderation/predefined_task/{task_id}/execute` triggers deterministic execution of a pending task. Updates task status to "completed" and stores structured JSON result. Accepts optional `room_id` in body or uses task's associated room.
+- Task execution tests — 13 new tests: 7 engine unit tests (vote tallying, edge cases, unsupported types) and 6 endpoint tests (success, not found, already completed, no room, unsupported type)
 
 ---
 

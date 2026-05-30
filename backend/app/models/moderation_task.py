@@ -20,10 +20,12 @@ class ModerationTask(BaseModelMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     task_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    room_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     topic: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     expected_output: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:
         return f"<ModerationTask {self.task_type!r} — {self.topic!r} ({self.status})>"

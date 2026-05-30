@@ -178,6 +178,53 @@ class ModeratorEngine:
     def __init__(self, room_id: str, moderator_agent_id: str):
         self.state = ModeratorState(room_id=room_id, moderator_agent_id=moderator_agent_id)
 
+    # ── Predefined task execution ────────────────────────────────────────
+    @staticmethod
+    def execute_task(task_type: str, topic: str, messages: list[dict]) -> dict:
+        """Execute a predefined moderation task deterministically.
+
+        Args:
+            task_type: One of the predefined task types.
+            topic: The topic to analyze.
+            messages: List of message dicts with 'content' and 'type' keys.
+
+        Returns:
+            Structured result dict with deterministic outcome.
+        """
+        if task_type == "consensus_vote":
+            return ModeratorEngine._execute_consensus_vote(topic, messages)
+        raise ValueError(f"Unsupported task type for execution: {task_type}")
+
+    @staticmethod
+    def _execute_consensus_vote(topic: str, messages: list[dict]) -> dict:
+        """Tally votes from messages and produce a structured consensus result."""
+        vote_messages = [m for m in messages if m.get("type") in ("vote", "Vote")]
+        yes_count = 0
+        no_count = 0
+        unknown_count = 0
+
+        for msg in vote_messages:
+            choice = ModeratorEngine._parse_vote_choice(msg["content"])
+            if choice in ("yes", "agree", "accept"):
+                yes_count += 1
+            elif choice in ("no", "disagree", "reject"):
+                no_count += 1
+            else:
+                unknown_count += 1
+
+        total = len(vote_messages)
+        consensus = total > 0 and (yes_count / total) > VOTE_PASS_THRESHOLD
+
+        return {
+            "topic": topic,
+            "votes_for": yes_count,
+            "votes_against": no_count,
+            "votes_unknown": unknown_count,
+            "total_votes": total,
+            "consensus_reached": consensus,
+            "decision": "accepted" if consensus else "no_consensus",
+        }
+
     # ── Phase management ─────────────────────────────────────────────────
     def can_transition(self, target: MeetingPhase) -> bool:
         return target in VALID_PHASE_TRANSITIONS.get(self.state.phase, set())

@@ -149,6 +149,7 @@ class PredefinedTaskCreate(BaseModel):
     task_type: str = Field(..., pattern="^(topic_review|consensus_vote|risk_assessment)$")
     topic: str = Field(..., min_length=1, max_length=500)
     description: str | None = None
+    room_id: str | None = None
 
 
 class PredefinedTaskResponse(BaseModel):
@@ -158,9 +159,15 @@ class PredefinedTaskResponse(BaseModel):
     description: str | None
     status: str
     expected_output: str
+    result: str | None = None
+    room_id: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExecuteTaskRequest(BaseModel):
+    room_id: str | None = None
 
 
 class PredefinedTaskListResponse(BaseModel):
