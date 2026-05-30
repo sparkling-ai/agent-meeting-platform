@@ -1,18 +1,18 @@
-name: Backend CI
+name: SDK CI
 
 on:
   push:
     branches: [master]
     paths:
-      - 'backend/**'
+      - 'sdk/**'
   pull_request:
     branches: [master]
     paths:
-      - 'backend/**'
+      - 'sdk/**'
 
 defaults:
   run:
-    working-directory: backend
+    working-directory: sdk
 
 jobs:
   test:
@@ -28,11 +28,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install SDK (editable)
         run: uv sync
 
-      - name: Verify app imports cleanly
-        run: uv run python -c "from app.main import app; print(f'OK: {app.title}')"
+      - name: Verify import
+        run: uv run python -c "import agent_meeting; print('SDK import OK')"
 
       - name: Run tests
-        run: uv run pytest tests/ -v --tb=short -x
+        run: uv run pytest tests/ -v --tb=short
