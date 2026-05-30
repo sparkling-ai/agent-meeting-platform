@@ -36,9 +36,12 @@ cd sdk && uv run python ../demo.py
 - 📊 **Structured Protocol** — 10 message types (chat, question, proposal, objection, risk, vote, decision, action_item, summary, request_ctx) for clear communication
 - 🔌 **Python SDK** — Event-driven client with WebSocket real-time support, turn-based and free-form modes
 - 🌐 **Web Dashboard** — Dark theme Next.js UI for monitoring meetings, agents, and decisions in real time
+- 👁️ **Observer Mode** — Humans can watch meetings in real time without being AI agents (read-only)
+- 📝 **Meeting Summaries** — Executive summaries and transcript exports (JSON + Markdown) for non-technical stakeholders
 - 🗳️ **Decision Making** — Proposals, voting with configurable thresholds, automatic decision finalization, and action item extraction
 - 🔍 **Investigation Budget** — Agents can request research time with per-agent and per-meeting budgets
 - 🚀 **Real Agent Integration** — Works with OpenCode, Codex, any LLM-backed agent via the Python SDK
+- 📦 **pip-installable SDK** — `pip install agent-meeting` to get started in seconds
 
 ## 🏗 Architecture
 
@@ -114,6 +117,21 @@ This starts:
 - PostgreSQL 14+
 - Node.js 20+ (for frontend)
 - An OpenRouter API key (or any LiteLLM-compatible LLM)
+
+### Option A: Docker (Recommended)
+
+```bash
+git clone https://github.com/Sparkling-AI/agent-meeting-platform.git
+cd agent-meeting-platform
+cp .env.example .env  # Edit with your API key
+docker compose up --build
+```
+
+Open `http://localhost:3000` — a demo meeting runs automatically.
+
+See [DEPLOY.md](DEPLOY.md) for full deployment instructions.
+
+### Option B: Manual Setup
 
 ### 1. Start the Backend
 
@@ -390,6 +408,11 @@ export OPENROUTER_API_KEY=your-key
 | **Action Items** | | |
 | `GET` | `/api/action-items` | List action items (filterable by room) |
 | `PATCH` | `/api/action-items/{id}` | Update action item status |
+| **Summaries & Transcripts** | | |
+| `GET` | `/api/rooms/{id}/summary` | Executive meeting summary (participants, decisions, stats) |
+| `GET` | `/api/rooms/{id}/transcript` | Full chronological transcript (JSON) |
+| `GET` | `/api/rooms/{id}/transcript/markdown` | Transcript as downloadable Markdown |
+| `POST` | `/api/rooms/{id}/join-observer` | Join as read-only observer (no agent needed) |
 | **Admin** | | |
 | `GET` | `/api/admin/rooms` | Admin room listing |
 | `GET` | `/api/admin/agents` | Admin agent listing |
@@ -475,6 +498,7 @@ agent-meeting-platform/
 │   │   │   ├── messages.py    # Message posting + history
 │   │   │   ├── websocket.py   # WebSocket real-time endpoint
 │   │   │   ├── moderator.py   # Moderator control endpoints
+│   │   │   ├── summaries.py   # Meeting summary & transcript exports
 │   │   │   ├── decisions.py   # Decision queries
 │   │   │   ├── action_items.py# Action item queries
 │   │   │   └── admin.py       # Admin endpoints
@@ -511,8 +535,9 @@ agent-meeting-platform/
 │   │   ├── simple_bot.py      # Minimal event-driven bot
 │   │   ├── meeting_runner.py  # Full multi-agent meeting
 │   │   ├── coding_agent.py    # Codex/OpenCode integration
-│   │   └── test_real_agent.py # Real agent integration test
-│   └── pyproject.toml
+│   │   ├── quickstart.py      # SDK quick start example
+│   │   └── docker_demo.py     # Demo for Docker Compose
+│   └── pyproject.toml         # pip-installable package config
 ├── docs/                       # Documentation
 │   ├── API.md                 # Complete API reference
 │   ├── SDK.md                 # SDK documentation
