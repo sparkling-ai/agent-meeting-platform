@@ -191,20 +191,35 @@ async def run_meeting(
         print(f"  {'─'*50}")
 
         for i, (client, member) in enumerate(zip(agents, team)):
+            # Build phase-aware prompt to drive productive outcomes
+            round_guidance = {
+                1: "Explore the topic. Share your unique perspective. Ask clarifying questions.",
+                2: "Build on others' ideas. Propose concrete solutions or raise specific risks.",
+                3: "Drive toward decisions. Make proposals, seek agreement, or flag blockers. Avoid repeating earlier points.",
+                4: "Final positions only. State your vote, agreement, or remaining concern. No new exploration.",
+            }.get(round_num, "Be concise and actionable.")
+
+            # Round 3+: force proposals, not more discussion
+            force_types = "proposal|vote|summary" if round_num >= 3 else "chat|question|proposal|objection|risk|summary"
+
             system = (
                 f"You are {member['name']}, the {member['role']}. "
                 f"Personality: {member['personality']} "
                 f"Decision angle: {member['decision_angle']} "
-                f"CRITICAL: DO NOT repeat what others have said. Bring YOUR unique {member['role']} perspective. "
-                f"If someone made your point, AGREE briefly and add a NEW angle. "
-                f"Respond with JSON: {{\"type\": \"chat|question|proposal|objection|risk|summary\", \"content\": \"your 2-4 sentence response\"}}"
+                f"\n\nCRITICAL RULES:\n"
+                f"1. DO NOT repeat what others said. If your point was made, AGREE briefly (1 sentence) and move on.\n"
+                f"2. Later rounds must show PROGRESS toward decisions, not re-exploration.\n"
+                f"3. If you agree with a proposal, say so explicitly and vote/proposal it.\n"
+                f"4. This round: {round_guidance}\n"
+                f"5. We value LOW COST and EFFICIENCY. Perfect is the enemy of good. Ship value fast.\n"
+                f"6. Respond with JSON: {{\"type\": \"{force_types}\", \"content\": \"your 2-4 sentence response\"}}"
             )
 
-            messages, _ = await client.get_messages(room_id, limit=15)
+            messages, _ = await client.get_messages(room_id, limit=20)
             history = ""
-            for m in messages[-15:]:
+            for m in messages[-20:]:
                 name = m.agent_name or m.agent_id[:8]
-                history += f"\n[{name}]({m.type}): {m.content[:150]}"
+                history += f"\n[{name}]({m.type}): {m.content[:200]}"
 
             raw = await call_llm(system, f"Discussion:\n{history}\n\nYour response as {member['name']} (JSON only):")
             msg_type, content = parse_response(raw)
@@ -214,6 +229,32 @@ async def run_meeting(
             await client.send(content[:800], type=msg_type, room_id=room_id)
             print(f"    💬 {member['name']}: {msg_type} — {content[:100]}")
             await asyncio.sleep(0.3)
+
+    # CEO override check — if team is looping, inject a decision
+    all_msgs_check, _ = await agents[0].get_messages(room_id, limit=50)
+    recent_types = [m.type for m in all_msgs_check[-18:]] if len(all_msgs_check) >= 12 else []
+    proposals = sum(1 for t in recent_types if t == "proposal")
+    summaries = sum(1 for t in recent_types if t == "summary")
+    risks = sum(1 for t in recent_types if t == "risk")
+
+    if len(recent_types) >= 12 and proposals == 0 and risks > 8:
+        # Team discussed risks but never proposed anything → CEO intervenes
+        ceo_message = (
+            "🚨 **CEO Override:** We've spent this entire meeting discussing risks without making a single proposal. "
+            "This is analysis paralysis. I'm calling it: we will define 3 concrete, shippable tasks for this sprint. "
+            "Each task must be completable in under 4 hours. Perfect is the enemy of good. "
+            "The goal is to ship useful value at minimum cost, not to eliminate all risk upfront."
+        )
+        await agents[0].send(ceo_message[:800], type="decision", room_id=room_id)
+        print(f"    👑 CEO OVERRIDE: Injected decision to break loop")
+    elif len(recent_types) >= 12 and proposals < 2 and summaries == 0:
+        # Some discussion but no convergence → CEO nudges
+        await agents[0].send(
+            "👑 **CEO Note:** We have enough discussion. I need concrete proposals NOW — "
+            "what are we actually building this sprint? Keep it simple, shippable, and useful.",
+            type="chat", room_id=room_id
+        )
+        print(f"    👑 CEO NUDGE: Pushing for proposals")
 
     # Close meeting
     await agents[0].close_meeting(room_id)
@@ -278,10 +319,19 @@ async def generate_sprint_tasks(meeting_result: dict) -> list[dict]:
         f"[{m['agent']}]: {m['content']}" for m in meeting_result["transcript"]
     )
     raw = await call_llm(
-        "You are a sprint planner. Extract concrete development tasks from this meeting.",
+        "You are a pragmatic sprint planner for a Python/FastAPI meeting platform. "
+        "The project is at /home/chopper/workspace/agent-meeting-platform. "
+        "It has: backend (FastAPI), SDK, frontend (Next.js), moderator engine, WebSocket, Docker. "
+        "RULES: Tasks must be CONCRETE code changes, not abstract evaluations. "
+        "Each task should be completable in 1-4 hours by a single developer. "
+        "Prefer: bug fixes, feature implementations, test improvements, documentation updates. "
+        "NOT: 'evaluate', 'assess', 'review', 'define' — those are discussions, not tasks. "
+        "Focus on shipping useful value at minimum cost.",
         f"Meeting transcript:\n{transcript_text[-5000:]}\n\n"
-        f"Based on this meeting, list 3-5 concrete development tasks as JSON array:\n"
-        f'[{{"title": "task title", "description": "what to do", "owner": "role", "priority": "high|medium|low"}}]\n'
+        f"Based on this meeting, list 3-5 concrete CODE tasks as JSON array:\n"
+        f'[{{"title": "task title", "description": "what code to write/change", "owner": "role", "priority": "high|medium|low"}}]\n'
+        f"Examples of good tasks: 'Fix integration test DB auth config', 'Add pytest fixtures for test DB', "
+        f"'Update CHANGELOG with v0.8.0 entries', 'Add WebSocket reconnection logic to frontend'.\n"
         f"Respond with ONLY the JSON array.",
         max_tokens=500,
     )
@@ -298,13 +348,60 @@ async def generate_sprint_tasks(meeting_result: dict) -> list[dict]:
 # ── Cycle runner ─────────────────────────────────────────────────
 
 async def run_development_sprint(tasks: list[dict], cycle: int) -> list[str]:
-    """Simulate development work (in reality, Chopper orchestrates subagents)."""
+    """Run real development using Claude Code as coding agent."""
     completed = []
+    project_dir = str(PROJECT_ROOT)
+
     for task in tasks:
-        print(f"    🔨 [{task.get('priority', 'med').upper()}] {task['title'][:60]}...")
-        # In production, this would spawn coding subagents
-        await asyncio.sleep(0.5)  # placeholder for actual work
-        completed.append(f"✅ {task['title']}")
+        title = task.get('title', 'Unknown task')
+        desc = task.get('description', '')
+        priority = task.get('priority', 'medium')
+        print(f"    🔨 [{priority.upper()}] {title[:60]}...")
+
+        # Build the coding prompt for Claude Code
+        code_prompt = (
+            f"You are working on the Agent Meeting Platform project at {project_dir}.\n\n"
+            f"Task: {title}\n"
+            f"Details: {desc}\n\n"
+            f"Rules:\n"
+            f"1. Follow AGENTS.md / CLAUDE.md in the project root\n"
+            f"2. Use conventional commits (feat:/fix:/docs:/refactor:/test:/chore:)\n"
+            f"3. Add tests for any new functionality\n"
+            f"4. Update CHANGELOG.md under [Unreleased]\n"
+            f"5. Keep changes minimal and focused — ship fast, iterate\n"
+            f"6. Run tests before committing: cd backend && python -m pytest tests/ -x -q\n"
+            f"7. Commit with a descriptive message\n"
+            f"8. Do NOT push — just commit locally\n\n"
+            f"Focus on the smallest useful increment. Don't over-engineer."
+        )
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "claude", "--print", "--permission-mode", "bypassPermissions",
+                "--prompt", code_prompt,
+                cwd=project_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+            output = stdout.decode()[:500] if stdout else ""
+            err = stderr.decode()[:200] if stderr else ""
+
+            if proc.returncode == 0:
+                completed.append(f"✅ {title}")
+                print(f"       Done: {output[:80]}...")
+            else:
+                completed.append(f"⚠️ {title} (partial — {err[:60]})")
+                print(f"       Partial: {err[:80]}")
+        except FileNotFoundError:
+            # Claude Code not available — fallback to simulated
+            print(f"       ⚠️ Claude Code not found, using simulated development")
+            await asyncio.sleep(0.5)
+            completed.append(f"✅ {title} (simulated)")
+        except asyncio.TimeoutError:
+            completed.append(f"⏰ {title} (timed out after 5min)")
+            print(f"       Timed out")
+
     return completed
 
 
@@ -385,11 +482,11 @@ async def main():
         if cycle == 1:
             planning_topic = (
                 "Sprint Planning — First autonomous cycle. "
-                "Review the current project state (CHANGELOG.md shows v0.7.0). "
-                "The platform has: backend, SDK, frontend, moderator, auth, RBAC. "
-                "Known gaps from last retro: test coverage (21 integration tests failing due to DB config), "
-                "Dependabot vulnerability alert, frontend not deployed. "
-                "What should we build/fix in this sprint?"
+                "Project state: backend (FastAPI) + SDK + frontend (Next.js) + moderator engine + WebSocket + Docker. "
+                "CHANGELOG shows v0.7.0. Known issues: 21 integration tests failing (DB auth config), "
+                "Dependabot security alert on repo, frontend not deployed, no real meeting re-run yet. "
+                "We need CONCRETE code tasks — bug fixes, features, tests. Not abstract evaluations. "
+                "What should we actually BUILD or FIX in this sprint?"
             )
         else:
             prev_review = results[-1].get("review", {})

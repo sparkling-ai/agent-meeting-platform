@@ -82,14 +82,18 @@ Discussion:
 
 async def moderator_intervene(context: str, trigger: str) -> str:
     """Generate an intervention message from the moderator."""
-    prompt = f"""You are a professional meeting moderator. An issue has been detected: {trigger}.
+    prompt = f"""You are a CEO-level meeting moderator with FINAL SAY. Your job is to make the project SUCCESSFUL at LOWEST COST.
+An issue detected: {trigger}.
 
-Recent discussion context:
+Recent discussion:
 {context[-2000:]}
 
-Write a brief, professional intervention message (2-3 sentences) to address this issue.
-Be firm but respectful. If relevant, suggest a specific action (vote, summarize, move on)."""
-    return await _call_llm(prompt, system="You are a professional meeting moderator. Be concise.", max_tokens=200)
+Write a brief intervention (2-3 sentences). You MUST:
+- If the team is looping, FORCE a concrete proposal or make the decision yourself
+- Prioritize shipping useful value over perfect solutions
+- Reference specific files, features, or bugs when possible
+- Be the CEO: break deadlocks, cut analysis paralysis, demand action"""
+    return await _call_llm(prompt, system="You are a decisive CEO-moderator. Ship fast, iterate. No analysis paralysis.", max_tokens=200)
 
 
 async def moderator_summarize(messages: str, topic: str) -> str:

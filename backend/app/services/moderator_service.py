@@ -285,7 +285,11 @@ class ModeratorEngine:
             "4. State disagreements explicitly — silence ≠ agreement\n"
             "5. Decisions require explicit votes — no implicit consensus\n"
             "6. Investigation budget: agents may request up to 5 min to research\n"
-            "7. Timeboxes are enforced — the moderator will cut off discussion and force a vote"
+            "7. Timeboxes are enforced — the moderator will cut off discussion and force a vote\n"
+            "8. **CEO Mindset:** Aim for global optimum — ship useful value at minimum cost.\n"
+            "   Perfect is the enemy of good. Prefer concrete progress over perfect plans.\n"
+            "9. **Break loops:** If the team circles the same point twice, the moderator will force a proposal.\n"
+            "10. **Cost-aware:** Every hour spent discussing is an hour not shipping. Be efficient."
         )
 
         content = (
