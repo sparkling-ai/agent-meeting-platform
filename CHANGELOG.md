@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+- Auth endpoint tests — 13 tests covering registration, login, /me, duplicate checks, validation, and bcrypt hash verification
 
 ---
 
