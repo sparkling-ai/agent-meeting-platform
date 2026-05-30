@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Moderator Engine task execution — `execute_task()` static method on ModeratorEngine that executes predefined tasks deterministically. Implements `consensus_vote` task type: tallies vote messages from a room, parses choices using existing vote parser, and returns structured result (votes_for, votes_against, total, consensus_reached, decision).
 - Task execution API endpoint — `POST /api/moderation/predefined_task/{task_id}/execute` triggers deterministic execution of a pending task. Updates task status to "completed" and stores structured JSON result. Accepts optional `room_id` in body or uses task's associated room.
 - Task execution tests — 13 new tests: 7 engine unit tests (vote tallying, edge cases, unsupported types) and 6 endpoint tests (success, not found, already completed, no room, unsupported type)
+- Integration tests for predefined moderation task flow — 4 E2E tests against real PostgreSQL covering full consensus_vote lifecycle: seed room with votes, create task, execute, verify result structure, listing/filtering, idempotency guard, and explicit room_id override
 
 ---
 
