@@ -54,5 +54,6 @@ After every meeting (demo, retrospective, planning, etc.):
 - `/sdk` — Python SDK (`agent_meeting` package)
 - `/docs` — Design docs and architecture
 - `/meetings` — Meeting transcripts and decisions (indexed in meetings/README.md)
+- `/team` — Team member profiles (used as personas for meetings)
 - `PLAN.md` — Implementation roadmap with phase tracking
 - `CHANGELOG.md` — Version history (this file is always up to date)
