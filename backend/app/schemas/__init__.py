@@ -139,3 +139,30 @@ class MessageListResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+# Moderation Task
+VALID_TASK_TYPES = ("topic_review", "consensus_vote", "risk_assessment")
+
+
+class PredefinedTaskCreate(BaseModel):
+    task_type: str = Field(..., pattern="^(topic_review|consensus_vote|risk_assessment)$")
+    topic: str = Field(..., min_length=1, max_length=500)
+    description: str | None = None
+
+
+class PredefinedTaskResponse(BaseModel):
+    id: uuid.UUID
+    task_type: str
+    topic: str
+    description: str | None
+    status: str
+    expected_output: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PredefinedTaskListResponse(BaseModel):
+    tasks: list[PredefinedTaskResponse]
+    total: int

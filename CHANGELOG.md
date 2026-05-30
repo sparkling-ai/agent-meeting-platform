@@ -9,7 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Auth endpoint tests — 13 tests covering registration, login, /me, duplicate checks, validation, and bcrypt hash verification
+- Predefined moderation task API — `POST /api/moderation/predefined_task` creates a moderation task from a predefined template (topic_review, consensus_vote, risk_assessment) with minimal input and auto-generated expected output. Includes GET for listing and fetching individual tasks.
+- Moderation task unit tests — 9 tests covering creation of all task types, validation errors, and get-by-id
 
 ---
 
