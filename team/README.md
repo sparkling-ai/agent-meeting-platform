@@ -74,7 +74,8 @@ Each cycle:
 2. **Document** — update CHANGELOG, README, inline docs
 3. **Test** — run test suite, fix failures
 4. **Meeting** — the team meets ON the platform to review, retro, and plan
-5. **Repeat** — meeting output becomes the next sprint backlog
+5. **Escalate** — flag anything needing Dandan's input (🚨 ESCALATION NEEDED)
+6. **Repeat** — meeting output becomes the next sprint backlog
 
 ## Meeting Cadence
 
@@ -84,3 +85,34 @@ Each cycle:
 | Retrospective | After each sprint | 15 min | Quality audit, process improvement |
 | Sprint Planning | Start of sprint | 15 min | Pick tasks, assign owners, set goals |
 | Design Review | As needed | 10 min | Debate architectural decisions |
+
+## Escalation Protocol
+
+Every meeting MUST include an **Escalation Board** at the end:
+
+```
+🚨 ESCALATIONS (needs Dandan)
+─────────────────────────────
+• [Item] — [Why blocked] — [What we need from Dandan]
+• (none) ← ideal state
+```
+
+**Escalation triggers:**
+- Product direction unclear or contested
+- Infrastructure/deployment decisions
+- API keys, credentials, or access needed
+- Security or privacy concerns
+- Budget or external service decisions
+- Anything that's been blocked for >1 sprint
+
+**Every team member has escalation rights.** No hierarchy — if Sam spots a blocker, Sam escalates.
+
+## Research Policy
+
+All team members SHOULD use web search to:
+- Validate technical assumptions
+- Research competitor features
+- Find best practices and libraries
+- Check current docs and API references
+
+Guessing is worse than spending 30 seconds on a search.

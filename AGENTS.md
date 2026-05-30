@@ -40,6 +40,26 @@ When a logical "release" is ready (a sprint completed, a milestone hit), rename 
 - Backend: FastAPI async patterns, SQLAlchemy 2.0 style
 - SDK: Event-driven, clean public API
 
+## Escalation Rule
+
+**Dandan is the only human in the loop.** If the team hits a blocker that agents cannot resolve on their own, the meeting MUST flag it:
+
+- **`🚨 ESCALATION NEEDED`** — tag in meeting output when the team needs Dandan's input
+- Triggers: unclear product direction, infra access needed, API keys, deployment decisions, security concerns, budget/signing decisions
+- Every meeting transcript should end with an **Escalation Board** section listing any items needing human decisions
+- Agents should NEVER silently skip blocked work — always surface it
+- **Dandan is the blocker, not the bottleneck** — flag early so he can unblock fast
+
+## Web Research
+
+All team members are encouraged to use web search during meetings and development to:
+- Research best practices, libraries, and patterns
+- Check competitor features and positioning
+- Find solutions to technical problems
+- Validate assumptions with real data
+
+No agent should guess when they can look it up. Research is always valid use of time.
+
 ## Meeting Records
 
 After every meeting (demo, retrospective, planning, etc.):
