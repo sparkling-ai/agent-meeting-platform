@@ -85,11 +85,59 @@
 - Need research: How do users find and evaluate AI tools in 2026?
 - What are the new distribution channels? (AI directories, word-of-mouth in AI communities, etc.)
 
-### 3. 🔍 Research Needed
+### 3. 🤖 AI-Native Users — Agent-Ready Instructions
+**Key insight:** Users of this product will likely use AI agents to set things up.
+
+**Implications:**
+- Clear, comprehensive instructions for AI agents are essential (not just human docs)
+- AGENTS.md / CLAUDE.md pattern we use internally should be a feature for users too
+- SDK quickstart must be agent-friendly: copy-paste commands, no ambiguity
+- Configuration should be declarative and machine-parseable
+- Error messages should be actionable by both humans and agents
+
+**Feature idea:** Ship a "setup agent" or setup guide specifically designed for AI assistants
+
+### 4. 🧠 Moderator Mindset as a Plugin System
+**Key insight:** The moderator mindset should be customizable, not hardcoded.
+
+**Architecture:**
+- **Generic mindset** (shipped with product): CEO-style decision making, cost-awareness, loop-breaking, efficiency
+- **Project-specific mindset** (user-configurable): target users, domain constraints, cost model, priorities
+- Users can override/update the default mindset for their context
+- Separate concerns:
+  - Decision-making style (generic)
+  - Cost model (configurable — e.g., dev cost, UX cost, acquisition cost)
+  - Target user profile (project-specific)
+  - Quality/speed tradeoff (configurable)
+
+**Implementation:**
+- `moderator_mindset/` folder with default + user overrides
+- YAML/JSON config for mindset parameters
+- Template system so users can define their own moderator personality
+
+### 5. 🔄 Self-Improving Loop — Chopper in the Cycle
+**Key insight:** Chopper (me!) should be part of the autonomous loop.
+
+**How it works:**
+- After every cycle, Chopper observes the meeting transcripts and code output
+- Chopper identifies problems, patterns, and improvement opportunities
+- Chopper documents findings in `iterations/NNN-*.md`
+- These become inputs for the next planning meeting
+- Chopper also contributes to meetings as a participant (the observant reindeer)
+
+**Chopper's role in the team:**
+- Observer + analyst (watches the process, spots issues)
+- Documenter (captures problems, writes iteration notes)
+- Connector (flags things that need Dandan's input)
+- NOT a decider (that's the moderator's job)
+- NOT a developer (that's Claude Code / Codex's job)
+
+### 6. 🔍 Research Needed
 - How are AI tools discovered and adopted by users in 2026?
 - What distribution channels work for AI developer tools?
 - What makes an AI tool "go viral" vs fade out?
 - Competitor analysis: how do similar meeting/collaboration AI tools acquire users?
+- What does an "AI-agent-friendly" setup guide look like? Best practices?
 
 ---
 
@@ -100,6 +148,9 @@
 3. **User acquisition research plan:** Concrete tasks for researching AI-era distribution
 4. **Process improvements:** How to prevent looping and ensure task quality
 5. **Parallel dev execution:** Run Claude Code tasks in parallel, not serial
+6. **Agent-ready documentation:** Ship AI-friendly setup instructions as a feature
+7. **Mindset plugin architecture:** Separate generic vs project-specific moderator config
+8. **Chopper-in-the-loop:** Formalize the observation → documentation → input cycle
 
 ---
 
